@@ -1,4 +1,4 @@
-# L3 执行配置 schema（阶段 A.3.3）
+# L3 执行配置 schema（阶段 A.3.3；A.4b 扩展 world 锚定切口）
 # Execution-config schema for the L3 execution layer.
 #
 # 这是 JSON Schema，用于校验 specs/dsl/cases/*/execution-config.yaml
@@ -15,7 +15,10 @@
 #   - known ∪ unknown 必须完整覆盖所有 joint 变量（不重不漏）
 #   - mode=open_loop 时 closure_cuts 与 world_binding 必须为空
 #   - mode=closed_loop 时 actuated_joints 必须为空
-#   - closure_cuts 中的 near/far ref 必须引用 exposed frame 或 ground frame
+#   - closure_cuts 中 far ref（L2 双 frame 切口）必须引用 exposed frame 或
+#     ground frame，且须匹配 EdgeGraph 中的 closed_mate 边
+#   - closure_cuts 中 anchor: world（L3 world 锚定切口）的 near 必须命中
+#     world_binding 的某条 ground；binding 的 T 省略时由求解器零位自动标定
 
 title: ExecutionConfig
 description: >-
@@ -74,29 +77,56 @@ $defs:
     additionalProperties: false
     required:
       - ground
-      - T
     properties:
       ground:
         description: 接地帧引用（如 manipulator_L.ground）。
         $ref: "#/$defs/portRef"
       T:
-        description: 4×4 齐次变换矩阵（静态标定偏移）。
+        description: >-
+          4×4 齐次变换矩阵（静态标定偏移，行主序）。
+          省略时由求解器在零位构型下自动标定：T = 全部关节处于零位时
+          该 ground frame 沿 FK 传播得到的位姿。零位下末端效应器与
+          世界原点重合，故该位姿即 ground frame 相对 world 的静态偏移。
         $ref: "#/$defs/homogenousMatrix"
 
   closureCut:
-    description: 单条闭环切口声明。
+    description: >-
+      单条闭环切口声明，两种形式之一（由 oneOf 强制互斥）：
+      (1) L2 双 frame 切口：near/far 均为图内 frame，须匹配 closed_mate 边；
+      (2) L3 world 锚定切口：声明 anchor: world，far 侧不引用图内 frame，
+          取 near（ground frame）所对应 world_binding 的标定位姿。
     type: object
     additionalProperties: false
     required:
       - near
-      - far
+    oneOf:
+      - required:
+          - far
+        not:
+          required:
+            - anchor
+      - required:
+          - anchor
+        not:
+          required:
+            - far
     properties:
       near:
-        description: 切口近端帧引用。
+        description: >-
+          切口近端帧引用。L2：切口的 socket 侧（生成树侧）；
+          L3：被世界绑定的 ground frame（如 manipulator_L.ground）。
         $ref: "#/$defs/portRef"
       far:
-        description: 切口远端帧引用。
+        description: 切口远端帧引用（仅 L2 双 frame 切口；与 anchor 互斥）。
         $ref: "#/$defs/portRef"
+      anchor:
+        description: >-
+          L3 world 锚定切口标记（与 far 互斥）。当前仅支持 "world"：
+          far 侧取 near 所对应 world_binding 的标定位姿。
+          残差构造时等效于 mate 变换 M = I₄、far 为常量标定位姿。
+        type: string
+        enum:
+          - world
       components:
         description: >-
           须归零的位姿分量子集。未指定时默认全部 6 分量 [tx, ty, tz, rx, ry, rz]。
@@ -147,8 +177,9 @@ properties:
     description: >-
       各 ground frame 到 world 的静态标定变换列表。
       每个 ground frame 的偏移由机构零位构型 FK 预计算
-      （末端效应器 T=I₄，沿机构传播至 ground frame 的位姿）。
-      仅 closed_loop 模式使用。
+      （末端效应器 T=I₄，沿机构传播至 ground frame 的位姿），
+      可在条目中省略 T 改由求解器自动标定。
+      仅 closed_loop 模式使用，与 anchor: world 切口配合完成 L3 世界系闭合。
     type: array
     minItems: 1
     items:
@@ -187,8 +218,8 @@ properties:
 
   closure_cuts:
     description: >-
-      闭环切口声明列表。每切口定义一个 near/far 帧对与须归零的位姿分量。
-      仅 closed_loop 模式使用。
+      闭环切口声明列表。每切口定义 near 与（far 帧对 或 anchor: world）
+      以及须归零的位姿分量。仅 closed_loop 模式使用。
     type: array
     minItems: 1
     items:

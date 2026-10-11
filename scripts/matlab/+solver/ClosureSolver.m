@@ -4,13 +4,22 @@ classdef ClosureSolver < handle
 %   converts them to numeric function handles, and bridges to fmincon for
 %   inverse kinematics solving.
 %
-%   Residual construction:
-%     For each closure cut (near=socket, far=plug), the mate transform M
-%     (Rz(roll*2π/sym)*Rx(π)) encodes the physical connection.  At closure,
-%     T_far should equal T_near * M.  The residual is defined as:
+%   Residual construction (two cut forms):
+%     Frame-pair cuts (L2): the mate transform M (Rz(roll*2π/sym)*Rx(π))
+%     encodes the physical connection.  At closure, T_far should equal
+%     T_near * M.  The residual is defined as:
 %         T_res = (T_near * M) \ T_far   →   should be I at closure.
-%     This is decomposed into a 6×1 pose error vector [tx,ty,tz,rx,ry,rz]
-%     (Z-Y-X Euler angles for rotation).
+%     World-anchored cuts (L3, e.g. M-REx): T_mate = I₄ and the far side is
+%     the constant calibrated binding.  At closure, T_near should equal
+%     ΔT⁻¹ · T_bind (ΔT = tip task target, default I₄):
+%         T_res = T_near \ (ΔT⁻¹ · T_bind)   →   should be I at closure.
+%     Both residuals are decomposed into a 6×1 pose error vector
+%     [tx,ty,tz,rx,ry,rz] (Z-Y-X Euler angles for rotation).
+%
+%   Known joint values (e.g. passive internal joints) are substituted
+%   numerically into all propagated poses before the residual is built
+%   (default 0; override via the KNOWNVALUES map argument):
+%       cs = solver.ClosureSolver(e.EdgeGraph_, cfg, e.JointVarMap, knownMap);
 %
 %   Usage:
 %       e   = ir.Expander(dslYaml);
@@ -23,20 +32,22 @@ classdef ClosureSolver < handle
 %       % Evaluate at specific joint values:
 %       r = cs.evalResidual([q_AB; q_BD; q_CD; q_AC]);
 %
-%       % Solve IK via fmincon:
+%       % L3 world-anchored IK: move the tip by ΔT, then solve:
+%       cs.setTipTarget(deltaT);
 %       [x_opt, fval] = cs.solveIK();
 %
 %   See also: +ir/EdgeGraph, +ir/ExecutionConfig, +solver/KinematicModel
 
     % ---- public read-only properties ----
     properties (SetAccess = private)
-        ClosureCuts   (:,1) struct          % struct array: near, far, components, T_mate (4×4 double)
+        ClosureCuts   (:,1) struct          % struct array: near, far, anchor, components, T_mate, T_bind (world cuts)
         UnknownSyms   (1,:) sym             % sym array: unknown joint variable handles
         UnknownNames  (1,:) cell            % cell array: canonical names of unknown variables
         ResidualSym   (:,1) sym             % sym column vector: full residual expression
         Tolerances    (1,1) struct          % struct: translation_mm, rotation_rad
         NumCuts       (1,1) double          % number of closure cuts
         NumComponents (1,1) double          % total number of residual components
+        TipTarget     (4,4) double = eye(4) % ΔT — tip task target for world-anchored cuts (default I₄)
     end
 
     % ---- private properties ----
@@ -53,11 +64,16 @@ classdef ClosureSolver < handle
 
         %% Constructor: propagate poses and build symbolic residual.
         %   obj = ClosureSolver(EDGEGRAPH, EXECCONFIG, JOINTVARMAP)
-        function obj = ClosureSolver(edgeGraph, execConfig, jointVarMap)
+        %   obj = ClosureSolver(EDGEGRAPH, EXECCONFIG, JOINTVARMAP, KNOWNVALUES)
+        %     KNOWNVALUES : (optional) containers.Map — numeric values for
+        %                   known joint variables (e.g. 'joint_1.q' → 0.1).
+        %                   Missing entries default to 0.
+        function obj = ClosureSolver(edgeGraph, execConfig, jointVarMap, knownValues)
             arguments
                 edgeGraph    (1,1) ir.EdgeGraph
                 execConfig   (1,1) ir.ExecutionConfig
                 jointVarMap  containers.Map
+                knownValues  containers.Map = containers.Map('KeyType','char','ValueType','any')
             end
 
             obj.EdgeGraph_ = edgeGraph;
@@ -79,9 +95,14 @@ classdef ClosureSolver < handle
             % ---- propagate symbolic poses through the edge graph ----
             obj.Poses_ = edgeGraph.propagate();
 
-            % ---- enrich ClosureCuts with T_mate from EdgeGraph ----
+            % ---- enrich ClosureCuts (T_mate / world-binding calibration) ----
             obj.ClosureCuts = obj.enrichClosureCuts(rawCuts);
             obj.NumCuts = numel(obj.ClosureCuts);
+
+            % ---- substitute known joint values into all propagated poses ----
+            % (default 0; must run AFTER enrichment so that world-binding
+            % calibration always reflects the true all-zero pose)
+            obj.substituteKnownValues(knownValues);
 
             % ---- collect unknown joint variable sym handles ----
             ujv = execConfig.getUnknownJointVars();
@@ -96,6 +117,20 @@ classdef ClosureSolver < handle
             % ---- build and cache full symbolic residual ----
             obj.ResidualSym = obj.buildFullResidual();
             obj.NumComponents = numel(obj.ResidualSym);
+
+            % ---- guard: residual must depend only on unknown variables ----
+            % NOTE: sym names are sanitized by matlab.lang.makeValidName in the
+            % Expander (dots → underscores), so compare against the rendered
+            % names of the unknown sym handles, not the canonical dotted names.
+            resNames = arrayfun(@char, symvar(obj.ResidualSym), 'UniformOutput', false);
+            unknownSymsNames = cellfun(@char, num2cell(obj.UnknownSyms), ...
+                'UniformOutput', false);
+            extraVars = setdiff(resNames, unknownSymsNames);
+            assert(isempty(extraVars), ...
+                'solver:ClosureSolver:unsubstitutedVars', ...
+                ['Residual still contains non-unknown variables: %s. ' ...
+                 'Add their values to the known list / KNOWNVALUES map.'], ...
+                strjoin(extraVars, ', '));
         end
 
         %% buildResidualForCut  Symbolic 6-DOF residual for one closure cut.
@@ -109,18 +144,32 @@ classdef ClosureSolver < handle
             assert(isKey(obj.Poses_, cut.near), ...
                 'solver:ClosureSolver:frameNotFound', ...
                 'Near frame "%s" not in propagated poses.', cut.near);
-            assert(isKey(obj.Poses_, cut.far), ...
-                'solver:ClosureSolver:frameNotFound', ...
-                'Far frame "%s" not in propagated poses.', cut.far);
 
-            T_near = obj.Poses_(cut.near);  % 4×4 sym — socket frame FK pose
-            T_far  = obj.Poses_(cut.far);   % 4×4 sym — plug frame FK pose
-            M      = cut.T_mate;            % 4×4 double — mate transform (near→far)
+            if strcmp(core.CommonUtils.field(cut, 'anchor', ''), 'world')
+                % --- world-anchored cut (L3) ---
+                % Near (ground) frame must equal ΔT⁻¹ · T_bind, where T_bind
+                % is the calibrated zero-pose binding (T_mate = I₄).
+                assert(isfield(cut, 'T_bind') && ~isempty(cut.T_bind), ...
+                    'solver:ClosureSolver:missingBinding', ...
+                    'World-anchored cut %d: T_bind not resolved.', cutIndex);
+                T_near = obj.Poses_(cut.near);              % 4×4 sym
+                T_far  = sym(obj.TipTarget \ cut.T_bind);   % constant target
+                T_err  = T_near \ T_far;                    % I at closure
+            else
+                % --- frame-pair cut (L2, existing behavior) ---
+                assert(isKey(obj.Poses_, cut.far), ...
+                    'solver:ClosureSolver:frameNotFound', ...
+                    'Far frame "%s" not in propagated poses.', cut.far);
 
-            % At closure: T_far = T_near * M
-            % Residual in far frame: (T_near * M) \ T_far → I at closure
-            T_expected = T_near * M;
-            T_err = T_expected \ T_far;  % 4×4 sym
+                T_near = obj.Poses_(cut.near);  % 4×4 sym — socket frame FK pose
+                T_far  = obj.Poses_(cut.far);   % 4×4 sym — plug frame FK pose
+                M      = cut.T_mate;            % 4×4 double — mate transform (near→far)
+
+                % At closure: T_far = T_near * M
+                % Residual in far frame: (T_near * M) \ T_far → I at closure
+                T_expected = T_near * M;
+                T_err = T_expected \ T_far;  % 4×4 sym
+            end
 
             % decompose to 6-DOF pose error
             resFull = localSymbolicPoseErrorFromRelative(T_err);  % 6×1 sym
@@ -173,6 +222,30 @@ classdef ClosureSolver < handle
             fprintf('  Zero-pose verification: |r| = %.2e  OK\n', rNorm);
         end
 
+        %% setTipTarget  Set the tip task target ΔT and rebuild the residual.
+        %   obj.setTipTarget(DELTAT)
+        %     DELTAT : 4×4 double — desired tip pose relative to the calibrated
+        %              zero pose (default eye(4) = pure closure).
+        %   Affects world-anchored cuts only: their far constant becomes
+        %   ΔT⁻¹ · T_bind.  Rebuilds ResidualSym and invalidates the cached
+        %   numeric function handle.
+        function setTipTarget(obj, deltaT)
+            arguments
+                obj
+                deltaT (4,4) double
+            end
+
+            if ~any(strcmp({obj.ClosureCuts.anchor}, 'world'))
+                warning('solver:ClosureSolver:noWorldCuts', ...
+                    'setTipTarget has no effect: no world-anchored cuts present.');
+            end
+
+            obj.TipTarget = deltaT;
+            obj.ResidualSym = obj.buildFullResidual();
+            obj.NumComponents = numel(obj.ResidualSym);
+            obj.ResidualFunc_ = [];   % invalidate cached numeric handle
+        end
+
         %% evalResidual  Evaluate numeric residual at given joint values.
         %   r = obj.evalResidual(JOINTVALS)
         %     JOINTVALS : numeric vector (order of obj.UnknownSyms) or
@@ -199,14 +272,16 @@ classdef ClosureSolver < handle
         %% solveIK  Solve IK via fmincon minimizing squared residual norm.
         %   [X_OPT, FVAL, EXITFLAG] = obj.solveIK()
         %   [X_OPT, FVAL, EXITFLAG] = obj.solveIK(X0, OPTIONS)
+        %     OPTIONS : fmincon options (optimoptions object or struct);
+        %               default: SQP with tight tolerances, iter-detailed.
         function [x_opt, fval, exitflag] = solveIK(obj, x0, options)
             arguments
                 obj
                 x0      (:,1) double = zeros(numel(obj.UnknownSyms), 1)
-                options (1,1) struct = struct()
+                options = struct()
             end
 
-            if isempty(fieldnames(options))
+            if isstruct(options) && isempty(fieldnames(options))
                 options = optimoptions('fmincon', ...
                     'Algorithm', 'sqp', ...
                     'Display', 'iter-detailed', ...
@@ -258,7 +333,7 @@ classdef ClosureSolver < handle
                 targetPose (4,4) double
                 endFrame   (1,:) char
                 x0         (:,1) double = zeros(numel(obj.UnknownSyms), 1)
-                options    (1,1) struct = struct()
+                options    = struct()
             end
 
             % ---- validate endFrame ----
@@ -278,7 +353,7 @@ classdef ClosureSolver < handle
             fhCombined = matlabFunction(combinedSym, 'Vars', {obj.UnknownSyms.'});
 
             % ---- set up fmincon options ----
-            if isempty(fieldnames(options))
+            if isstruct(options) && isempty(fieldnames(options))
                 options = optimoptions('fmincon', ...
                     'Algorithm', 'sqp', ...
                     'Display', 'iter-detailed', ...
@@ -332,11 +407,15 @@ classdef ClosureSolver < handle
 
             fprintf('\nResidual components:\n');
             compIdx = 1;
-            allComps = {'tx','ty','tz','rx','ry','rz'};
             for i = 1:obj.NumCuts
                 cut = obj.ClosureCuts(i);
                 comps = cut.components;
-                fprintf('  Cut %d (%s ←→ %s):\n', i, cut.near, cut.far);
+                if strcmp(core.CommonUtils.field(cut, 'anchor', ''), 'world')
+                    farLabel = '(world binding)';
+                else
+                    farLabel = cut.far;
+                end
+                fprintf('  Cut %d (%s ←→ %s):\n', i, cut.near, farLabel);
                 for j = 1:numel(comps)
                     fprintf('    %-4s = % 12.6e\n', comps{j}, r(compIdx));
                     compIdx = compIdx + 1;
@@ -363,29 +442,119 @@ classdef ClosureSolver < handle
     % ---- private methods ----
     methods (Access = private)
 
-        %% enrichClosureCuts  Augment ClosureCuts with T_mate from EdgeGraph.
+        %% enrichClosureCuts  Resolve mate transforms / world-binding calibrations.
         function cuts = enrichClosureCuts(obj, rawCuts)
             cuts = rawCuts;
             allMates = obj.EdgeGraph_.findMates();
             closedMask = strcmp({allMates.kind}, 'closed_mate');
             closedMates = allMates(closedMask);
 
+            % world-binding declarations from ExecutionConfig (ground → T | [])
+            wbGrounds = {obj.ExecConfig_.WorldBindings.ground};
+            wbPoses   = {obj.ExecConfig_.WorldBindings.T};
+
             for i = 1:numel(cuts)
-                % match closed_mate edge by near/far frame names
-                found = false;
-                for j = 1:numel(closedMates)
-                    if strcmp(closedMates(j).from, cuts(i).near) && ...
-                       strcmp(closedMates(j).to, cuts(i).far)
-                        cuts(i).T_mate = closedMates(j).T;
-                        found = true;
-                        break;
+                if strcmp(core.CommonUtils.field(cuts(i), 'anchor', ''), 'world')
+                    % --- world-anchored cut (L3): T_mate = I₄, constant far side ---
+                    idx = find(strcmp(wbGrounds, cuts(i).near), 1);
+                    assert(~isempty(idx), ...
+                        'solver:ClosureSolver:anchorNotBound', ...
+                        'World-anchored cut %d: near "%s" has no world_binding.', ...
+                        i, cuts(i).near);
+
+                    % calibration: zero-pose FK pose of the near frame
+                    T_calib = obj.calibrateBinding(cuts(i).near);
+                    T_declared = wbPoses{idx};
+                    if ~isempty(T_declared)
+                        % explicit calibration in YAML — verify consistency
+                        dev = norm(T_declared - T_calib, 'fro');
+                        assert(dev < 1e-6, ...
+                            'solver:ClosureSolver:bindingMismatch', ...
+                            ['World-anchored cut %d: declared world_binding T for ' ...
+                             '"%s" deviates from the zero-pose FK calibration ' ...
+                             'by %.3e (tolerance 1e-6). Regenerate the calibration ' ...
+                             'or omit T for auto-calibration.'], ...
+                            i, cuts(i).near, dev);
+                        T_bind = T_declared;
+                    else
+                        T_bind = T_calib;
                     end
+
+                    cuts(i).T_mate = eye(4);
+                    cuts(i).T_bind = T_bind;
+                else
+                    % --- frame-pair cut (L2): match closed_mate edge ---
+                    found = false;
+                    for j = 1:numel(closedMates)
+                        if strcmp(closedMates(j).from, cuts(i).near) && ...
+                           strcmp(closedMates(j).to, cuts(i).far)
+                            cuts(i).T_mate = closedMates(j).T;
+                            found = true;
+                            break;
+                        end
+                    end
+                    assert(found, ...
+                        'solver:ClosureSolver:mateNotFound', ...
+                        ['No closed_mate edge matches cut %d (near="%s", far="%s"). ' ...
+                         'Ensure EdgeGraph has not been modified after ExecutionConfig construction.'], ...
+                        i, cuts(i).near, cuts(i).far);
                 end
-                assert(found, ...
-                    'solver:ClosureSolver:mateNotFound', ...
-                    ['No closed_mate edge matches cut %d (near="%s", far="%s"). ' ...
-                     'Ensure EdgeGraph has not been modified after ExecutionConfig construction.'], ...
-                    i, cuts(i).near, cuts(i).far);
+            end
+        end
+
+        %% calibrateBinding  Zero-pose FK pose of a frame (all joints = 0).
+        function T0 = calibrateBinding(obj, frameName)
+            assert(isKey(obj.Poses_, frameName), ...
+                'solver:ClosureSolver:frameNotFound', ...
+                'World-anchored cut frame "%s" not in propagated poses.', frameName);
+            T_sym = obj.Poses_(frameName);
+            if obj.JointVarMap_.Count == 0 || ~isa(T_sym, 'sym')
+                T0 = double(T_sym);
+                return;
+            end
+            valsCell = values(obj.JointVarMap_);
+            allSyms = [valsCell{:}];
+            T0 = double(subs(T_sym, allSyms, zeros(1, numel(allSyms))));
+        end
+
+        %% substituteKnownValues  Substitute known joint values into all poses.
+        function substituteKnownValues(obj, knownValues)
+            kjv = obj.ExecConfig_.getKnownJointVars();
+            nKnown = numel(kjv);
+            if nKnown == 0
+                return;
+            end
+
+            % validate provided keys against known joint names
+            knownNames = cell(1, nKnown);
+            for i = 1:nKnown
+                knownNames{i} = kjv(i).name;
+            end
+            if knownValues.Count > 0
+                badKeys = setdiff(keys(knownValues), knownNames);
+                assert(isempty(badKeys), ...
+                    'solver:ClosureSolver:badKnownValue', ...
+                    'KNOWNVALUES contains non-known-joint key(s): %s', ...
+                    strjoin(badKeys, ', '));
+            end
+
+            % resolve values (missing entries default to 0)
+            knownSyms = sym(zeros(1, nKnown));
+            knownVals = zeros(1, nKnown);
+            for i = 1:nKnown
+                knownSyms(i) = kjv(i).symHandle;
+                if knownValues.Count > 0 && isKey(knownValues, kjv(i).name)
+                    knownVals(i) = knownValues(kjv(i).name);
+                end
+            end
+
+            % substitute into every symbolic pose
+            poseKeys = keys(obj.Poses_);
+            for k = 1:numel(poseKeys)
+                T = obj.Poses_(poseKeys{k});
+                if isa(T, 'sym')
+                    obj.Poses_(poseKeys{k}) = subs(T, knownSyms, knownVals);
+                end
             end
         end
 
@@ -410,10 +579,19 @@ function err = localSymbolicPoseErrorFromRelative(T_rel)
     R_rel = T_rel(1:3, 1:3);
 
     % Z-Y-X decomposition: R = Rz(rz) * Ry(ry) * Rx(rx)
-    %   R(3,1) = -sin(ry)  →  ry = atan2(-R(3,1), sqrt(R(1,1)^2+R(2,1)^2))
+    %   R(3,1) = -sin(ry)  →  ry = asin(-R(3,1))          (range [-π/2, π/2])
     %   R(3,2) =  cos(ry)*sin(rx)  →  rx = atan2(R(3,2), R(3,3))
     %   R(2,1) =  sin(rz)*cos(ry)  →  rz = atan2(R(2,1), R(1,1))
-    ry = atan2(-R_rel(3,1), sqrt(R_rel(1,1)^2 + R_rel(2,1)^2));
+    %
+    % NOTE (A.5.1): ry deliberately uses asin instead of the algebraically
+    % equivalent atan2(-R31, sqrt(R11^2+R21^2)).  The atan2 form forces a
+    % symbolic sqrt of a sum of squares whose expansion introduces conj()
+    % terms and enormous rational coefficients; for mechanisms with heavily
+    % expanded symbolic poses (e.g. m-rex-3t1r with full 6-component cuts)
+    % the generated numeric code then cancels/overflows to NaN.  asin is
+    % division- and sqrt-free and has the identical branch: both return the
+    % ZYX ry ∈ [-π/2, π/2].
+    ry = asin(-R_rel(3,1));
     rx = atan2(R_rel(3,2), R_rel(3,3));
     rz = atan2(R_rel(2,1), R_rel(1,1));
 

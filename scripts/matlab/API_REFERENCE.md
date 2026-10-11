@@ -16,7 +16,7 @@
 | `+solver/` | [ClosureSolver](#closuresolver) | handle 类 | 闭环残差构造 + fmincon 求解 |
 | `+viz/` | [mechanism](#mechanism) | 函数 | 机构装配与可视化 |
 | `+viz/` | [module](#module) | 函数 | 单模块可视化校验 |
-| `+viz/` | [animate](#animate) | 函数 | 关节轨迹动画 |
+| `+viz/` | [animate](#animate) | 函数 | 关节轨迹动画（world 锚定 + tip 轨迹） |
 | `+viz/` | [allModules](#allmodules) | 函数 | 批量模块校验 |
 
 ---
@@ -200,8 +200,8 @@ cfg = ir.ExecutionConfig('exec-config.yaml', e.SymbolRegistry, e.EdgeGraph_);
 #### 设计要点
 
 - **value class**: 配置是不可变数据，构造后即冻结，value 语义更安全（避免意外共享修改）。
-- **closure_cuts 的两种来源**: 显式声明（L3 world 系闭环，如 M-REx）vs 自动推导（L2 内部闭环，DSL 已声明 `closed: true`）。
-- **world_binding 的两种来源**: 显式声明（L3）vs 空（L2，ground 由 IR root nodes 处理）。
+- **closure_cuts 的两种来源**: 显式声明（L3 world 系闭环，如 M-REx；`{near, far}` 帧对与 `{near, anchor: world}` world 锚定两种形式互斥）vs 自动推导（L2 内部闭环，DSL 已声明 `closed: true`）。
+- **world_binding 的两种来源**: 显式声明（L3，`anchor: world` 切口的 near 必须命中其中某条 ground；条目 `T` 可省略 → 由求解器零位自动标定）vs 空（L2，ground 由 IR root nodes 处理）。
 
 #### 使用示例
 
@@ -281,44 +281,56 @@ prob = km.formulatePoseProblem(cfg);         % FK 或 IK 问题
 
 **类型**: `handle` 类  
 **文件**: `+solver/ClosureSolver.m`  
-**职责**: 闭环约束构造与数值求解。对每个 closure cut 构建 6-DOF 符号残差 `(T_near * M) \ T_far`，转为数值函数句柄后桥接 `fmincon` 求解 IK。
+**职责**: 闭环约束构造与数值求解。支持两类 closure cut——L2 双 frame 切口（`(T_near * M) \ T_far`）与 L3 world 锚定切口（`anchor: world`，far 为标定常量）——构建 6-DOF 符号残差，转为数值函数句柄后桥接 `fmincon` 求解 IK。
 
 #### Public Properties
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `ClosureCuts` | `struct array` | 字段: `near`, `far`, `components`, `T_mate`（4×4 double） |
+| `ClosureCuts` | `struct array` | 字段: `near`, `far`, `anchor`, `components`, `T_mate`, `T_bind`（world 锚定切口的标定常量，4×4 double） |
 | `UnknownSyms` | `sym array` | unknown 关节变量的符号句柄 |
 | `UnknownNames` | `cell array` | unknown 关节变量的 canonical name |
 | `ResidualSym` | `sym column vector` | 完整符号残差表达式（所有 cut 拼接） |
 | `Tolerances` | `struct` | 字段: `translation_mm`, `rotation_rad` |
 | `NumCuts` | `double` | 闭环切割数 |
 | `NumComponents` | `double` | 残差总维度 |
+| `TipTarget` | `4×4 double` | ΔT——world 锚定切口的 tip 任务目标（默认 `eye(4)`，见 `setTipTarget`） |
 
 #### Public Methods
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `ClosureSolver` | `(edgeGraph, execConfig, jointVarMap)` | 构造函数：传播符号位姿 → enrich closure cuts → 构建符号残差 |
+| `ClosureSolver` | `(edgeGraph, execConfig, jointVarMap, knownValues?)` | 构造函数：传播符号位姿 → 标定/enrich closure cuts → known 关节代换（默认 0）→ 构建符号残差 |
 | `buildResidualForCut` | `(cutIndex) → sym vector` | 为单个 closure cut 构建 6-DOF 符号残差（按 components 过滤） |
 | `buildFullResidual` | `() → sym vector` | 拼接所有 cut 的残差 |
 | `toNumericFunction` | `() → function_handle` | 将符号残差转为 `@(x)` 数值函数句柄（缓存） |
 | `verifyZeroPose` | `()` | 零位姿验证：断言 `‖residual‖ < 1e-12` |
+| `setTipTarget` | `(deltaT) → void` | 设置 tip 任务目标 ΔT 并重建符号残差（仅作用于 world 锚定切口） |
 | `evalResidual` | `(jointVals) → vector` | 在给定关节值处求数值残差 |
-| `solveIK` | `(x0?, options?) → [x_opt, fval, exitflag]` | 通过 `fmincon` SQP 最小化 `‖residual‖²` 求解 IK |
+| `solveIK` | `(x0?, options?) → [x_opt, fval, exitflag]` | 通过 `fmincon` SQP 最小化 `‖residual‖²` 求解 IK（options 可为 fmincon options 对象或 struct） |
 | `solveIKWithTarget` | `(targetPose, endFrame, x0?, options?) → [x_opt, fval, exitflag, report]` | 组合残差 = 闭环残差 + 末端位姿误差，联合求解 |
 
 #### 残差构造原理
 
-对每个 closure cut（`near`=socket, `far`=plug）：
+对每个 closure cut：
+
+**L2 双 frame 切口**（`near`=socket, `far`=plug）：
 
 ```
-T_expected = T_near(q) * M        % M = Rz(roll*2π/sym) * Rx(π)
-T_err      = T_expected \ T_far(q)  % 应为 I 当闭环
-residual   = poseError(T_err)       % 6-DOF: [tx,ty,tz,rx,ry,rz]
+T_expected = T_near(q) * M           % M = Rz(roll*2π/sym) * Rx(π)
+T_err      = T_expected \ T_far(q)   % 应为 I 当闭环
 ```
 
-所有 cut 的残差纵向拼接为完整残差向量。
+**L3 world 锚定切口**（`anchor: world`，`T_mate = I₄`、far 为标定常量 `T_bind`）：
+
+```
+T_err = T_near(q) \ (ΔT⁻¹ · T_bind)  % 应为 I 当闭环
+```
+
+- `T_bind`：零位构型标定位姿（`world_binding.T` 显式提供，或由 `calibrateBinding` 自动计算；
+  显式值偏离自动标定 > 1e-6 时报 `bindingMismatch`）
+- `residual = poseError(T_err)` → 6-DOF `[tx,ty,tz,rx,ry,rz]`，按 cut 的 `components` 掩码过滤；
+  所有 cut 的残差纵向拼接为完整残差向量。
 
 #### 设计要点
 
@@ -326,6 +338,8 @@ residual   = poseError(T_err)       % 6-DOF: [tx,ty,tz,rx,ry,rz]
 - **SQP 求解器**: 默认使用 `fmincon` 的 `sqp` 算法，tight tolerances（`OptimalityTolerance=1e-12`）。
 - **零位姿验证**: 构造函数后应调用 `verifyZeroPose()` 确认符号推导无误。
 - **组合求解**: `solveIKWithTarget` 将闭环约束 + 末端位姿目标同时优化，适用于同时满足闭环精度和 task-space 目标的场景。
+- **L3 world 锚定切口**: `anchor: world` 的 cut 将 ground frame 锚定到 `world_binding` 标定位姿；`setTipTarget(ΔT)` 把 tip 任务目标注入常量侧（ΔT = 相对零位标定的位移），用于 3T/R 任务求解。
+- **known 关节代换**: 构造时把 known 关节值（默认 0）`subs` 进全部符号位姿，残差只含 unknown 变量（构造末尾有守卫断言）。
 
 #### 使用示例
 
@@ -334,6 +348,13 @@ cs = solver.ClosureSolver(e.EdgeGraph_, cfg, e.JointVarMap);
 cs.verifyZeroPose();                              % 零位姿验证
 r = cs.evalResidual([0.5; -0.3; 0.1; -0.2]);     % 数值残差
 [x_opt, fval] = cs.solveIK();                     % fmincon 求解
+
+% L3 world 锚定闭环（M-REx）：设置 tip 目标 ΔT 后求解
+csL3 = solver.ClosureSolver(e.EdgeGraph_, cfg, e.JointVarMap, ...
+    containers.Map({'joint_1.q'}, {0.0}));       % known 关节值（缺省 0）
+D = eye(4); D(1,4) = 10;                          % tip 沿 +X 平移 10 mm
+csL3.setTipTarget(D);
+[x_opt, fval] = csL3.solveIK();
 ```
 
 #### See Also
@@ -444,8 +465,8 @@ disp(r.frames.linkB);  % 4×4 double 位姿
 
 **类型**: 函数  
 **文件**: `+viz/animate.m`  
-**签名**: `viz.animate(dslYaml, jointTrajectory, varNames, fps?)`  
-**职责**: 通过关节轨迹序列动画展示机构运动。构建一次 `Expander`，预编译位姿函数，逐帧代入数值渲染。
+**签名**: `viz.animate(dslYaml, jointTrajectory, varNames, fps?, Name, Value...)`  
+**职责**: 通过关节轨迹序列动画展示机构运动。构建一次 `Expander`，预编译位姿函数，逐帧代入数值渲染；可选 world 锚定渲染（L3 世界系闭环）与 tip 世界轨迹叠加。
 
 #### 播放控件
 
@@ -455,6 +476,13 @@ disp(r.frames.linkB);  % 4×4 double 位姿
 | ⏮ Reset | 跳回第一帧 |
 | Speed 滑块 | 调整 fps（1–60） |
 | Frame 滑块 | 拖拽到任意帧 |
+
+#### 名称-值选项
+
+| 选项 | 取值 | 说明 |
+|------|------|------|
+| `'Anchor'` | `'root'`（默认）或 `'world'` | 显示参照系。`'world'` 把 tool-rooted FK 位姿经 $E(q)=T_{\text{bind}}\cdot T_{\text{tip}\leftarrow g_{\text{ref}}}^{-1}(q)$ 共轭到世界系，使 L3 世界系闭环机构（如 m-rex-3t1r）的两台 Manipulator ground frame 静止于标定位姿、工具端真实移动。要求机构存在 `semantic_tag: 'ground'` 的 frame；$T_{\text{bind}}$ 取零位 FK（与 `solver.ClosureSolver` 自动标定一致）；多余 ground frame 打印分支一致性诊断 |
+| `'ShowTrail'` | `logical`，默认 `true` | 叠加 tip 世界轨迹：完整路径淡虚线 + 已走过段高亮 + 当前 tip 标记（仅 `'world'` 模式生效） |
 
 #### 性能优化
 
@@ -469,7 +497,8 @@ disp(r.frames.linkB);  % 4×4 double 位姿
 | `dslYaml` | `char` | 机构装配 DSL YAML 路径 |
 | `jointTrajectory` | `nFrames × nVars double` | 关节轨迹矩阵 |
 | `varNames` | `cell array` | 列对应的 canonical 变量名 |
-| `fps` | `double` | 播放速度（默认 10） |
+| `fps` | `double` | 播放速度（默认 10；可省略或传 `[]`） |
+| `Name, Value...` | 名称-值对 | 可选，位于 `fps` 之后；见「名称-值选项」 |
 
 #### 使用示例
 
@@ -478,6 +507,12 @@ theta = linspace(0, pi/3, 60)';
 Q = [theta, -theta, theta, -theta];
 varNames = {'joint_AB.q','joint_BD.q','joint_CD.q','joint_AC.q'};
 viz.animate('robot_description.yaml', Q, varNames, 15);
+```
+
+```matlab
+% world 锚定动画（L3 世界系闭环机构，如 m-rex-3t1r）：
+% Q 由 tests/pipeline/test_animation_m_rex_3t1r.m 顶部参数区闭式构造生成
+viz.animate(dslFile, Q, varNames, 15, 'Anchor', 'world');
 ```
 
 #### See Also

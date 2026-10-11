@@ -204,6 +204,19 @@ $$T_{\text{residual}} = T_{\text{far}}^{-1} \cdot T_{\text{near}}$$
 | 残差公式 | $T_{\text{residual}} = T_{\text{far}}^{-1} \cdot T_{\text{near}}$ | 同左 |
 | 可视化表现 | 补边 mate 线（橙色虚线） | 末端（`tip_origin`）在 `world` 原点，各 `ground` frame 在标定偏移位置（详见 `ARCHITECTURE.md`） |
 
+**L3 切口声明（`anchor: world`，A.4b 落地）**：L3 世界系闭环的 `closure_cuts` 以
+`anchor: world` 声明——`near` = 被绑定的 `ground` frame；far 侧不引用图内 frame，而是取
+该 ground 的 `world_binding` 标定位姿 $T_{\text{bind}}$（残差中等效 mate 变换 $M = I_4$、
+far 为常量）。求解器实现（`solver.ClosureSolver`）的残差为：
+
+$$T_{\text{residual},i} = T_{\text{near},i}(q)^{-1} \cdot (\Delta T^{-1} \cdot T_{\text{bind},i})$$
+
+- $T_{\text{bind},i}$：零位构型标定值——`world_binding.T` 显式给出，或省略后由求解器
+  在全部关节零位下自动计算（显式值偏离自动标定 > 1e-6 时报错）。
+- $\Delta T$：tip 任务目标（`setTipTarget`，默认 $I_4$ —— 纯闭环/零位验证）。
+- 实例：`cases/m-rex-3t1r/execution-config.yaml`；端到端验证：
+  `tests/pipeline/test_closure_solver_m_rex_3t1r.m`。
+
 ---
 
 ## 7. 验证参照

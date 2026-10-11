@@ -54,6 +54,72 @@ flowchart TD
 | `joint_2.q` | 第二转动副角度 | rad | observable |
 | `pipette.tip_origin` | 工具尖端任务系 | — | observable（FK/IK 输出候选） |
 
+## L3 执行层（execution-config）
+
+`execution-config.yaml` 把本机构接入 L3 世界系闭环——**案例唯一运行配置**（3T1R 全任务空间）：
+
+- **模式**：`closed_loop` IK——`known` = `pipette.tip_origin`（目标位姿载体）；
+  `unknown` = 6 个 Manipulator 笛卡尔驱动位移（`dx/dy/dz`）+ 内部关节 `joint_1.q` / `joint_2.q`
+  → 8 未知量 / 12 残差分量（2 切口 × 6）。
+- **切口**：每条 Manipulator 的 `ground` frame 以 `anchor: world` 锚定到其 `world_binding`
+  标定位姿（残差取 M = I₄、far 为常量；语义见
+  [`connection-semantics.md`](../../connection-semantics.md) §6.4）。
+- **标定**：`world_binding` 省略 `T`，由 `solver.ClosureSolver` 在零位构型下自动标定。
+- **历史**：A.4b 曾用 6 未知量 3T 基线配置（内部关节 known、`components: [tx, ty, tz]`）；
+  A.5.1 释放内部关节后其能力被本配置覆盖，基线配置于 2026-10-11 配置合并中移除——其
+  KNOWNVALUES / 方形 6×6 基线覆盖保留在测试 tmp fixture 中。
+
+端到端验证：`tests/pipeline/test_closure_solver_m_rex_3t1r.m`（需 Symbolic Math Toolbox；
+以 `tests/pipeline` 为工作目录运行）。实测结果（2026-10-11，8 未知量 / 12 分量）：
+
+| 检查项 | 结果 |
+|------|------|
+| 零位残差 | 6.3e-16（< 1e-12） |
+| 约束 Jacobian（零位，12×8） | rank 8/8 满列秩，cond = 227 |
+| 3T 基线 fixture（6×6） | rank 6/6，cond = 1.0，J ≡ I₆（A.4b 指标复现） |
+| 平移 IK（±X/±Y/±Z，5–10 mm）与 Rx 10° | 零初值一次收敛，‖r‖ ≈ 8e-13…1.3e-10 |
+| Rx 铰链解 | q1 = +φ、q2 = −φ（与 ±φ 偏差 9.6e-14） |
+| world-rooted 交叉验证（+X 10 mm） | 两分支 ‖E−ΔT‖ ≈ 1e-9…6e-9（全 6 分量） |
+| Ry 2°（任务流形外） | 正确拒绝（‖r‖ = 4.9e-2，偏差 1.391） |
+
+> **DOF 发现（A.4b → A.5.1）**：`joint_1.q` / `joint_2.q` 视为已知时机构仅保留 3 个平移
+> 自由度——纯转动目标无法满足（Ry 2° 的 tip 位姿偏差 1.391）。释放内部关节移入 `unknown`
+> 后获得完整 3T1R 能力；本案例现以该表述为唯一配置。
+
+## 动画（A.5.1）
+
+world-anchored 动画：`viz.animate(dsl, Q, varNames, 15, 'Anchor', 'world')`（figure 中 ▶ Play 播放）。
+端到端测试与轨迹生成：`tests/pipeline/test_animation_m_rex_3t1r.m`（全绿）。
+
+**demo 轨迹的规定位置**：轨迹不在任何 `execution-config*.yaml` 里——它由测试脚本顶部参数区定义，
+经闭式构造展开成关节轨迹矩阵 `Q` 后传入动画/求解器（与 single-closed-loop 测试内联轨迹同例）：
+
+- φ（tip 绕 X 旋转）：−28° → +28°（28° 按 20/20/30 mm 实机行程标定；30° 时 dy 会达 20.2 mm）
+- 位姿平移：XY 平面圆，半径 5 mm，一圈；θ(ry) = ψ(rz) = 0 锁定 —— RCM (x, y, z, φ) 任务模式
+- 60 帧 @ 15 fps
+
+**闭式构造（无 IK）**：
+
+$$q_1 = \varphi,\quad q_2 = -\varphi,\qquad
+\mathbf{d}_{L/R} = R_{\text{bind}}^{\top}\bigl(\mathbf{p}(t) - \mathbf{p}_{\text{swing}}^{L/R}(\mp\varphi)\bigr)$$
+
+其中 $R_{\text{bind}} = \mathrm{rot}(P_L) = \mathrm{rot}(P_R)$（两侧 binding 旋转相同），
+$\mathbf{p}_{\text{swing}}$ 为单铰链偏转、Manipulator 零位时的 tip 世界位置（编译位姿函数求值）。
+
+实测（`test_animation_m_rex_3t1r.m`）：
+
+| 检查项 | 结果 |
+|------|------|
+| 闭式轨迹 vs 目标（60 帧，全 6 自由度） | max‖E−D‖ = 1.9e-14 |
+| ClosureSolver 残差（全 12 分量，采样 5 帧） | max\|r\| = 1.7e-14（无 NaN） |
+| Manipulator 行程 | \|dx\|≤13.1、\|dy\|≤18.8、\|dz\|≤7.3 mm（≤ 20/20/30） |
+| 动画分支一致性（两 ground 互差） | max = 2.2e-14 |
+
+> `execution-config.yaml`（原 `execution-config-3t1r.yaml`，配置合并后更名）= 3T1R
+> **全任务空间**执行配置（`unknown` 含两个内部关节、`components` 全 12 分量）——供求解器侧
+> 残差验证与 IK 使用；只规定 L3 执行语义，不含轨迹。
+> 原 6 未知量 3T 基线配置（A.4b）已于 2026-10-11 配置合并中移除（覆盖迁移至测试 fixture）。
+
 ## 说明
 
 - 两端 Manipulator 的 ground frame 如何绑定到 world、哪个 Manipulator 作为驱动/被动、`endFrame` 指定、变量 `known/unknown` 分区均属 **L3 execution-config**，不在本 DSL 中声明。

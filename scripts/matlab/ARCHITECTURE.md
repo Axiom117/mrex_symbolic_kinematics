@@ -90,7 +90,7 @@ graph TB
 ### 求解层 (`+solver/`)
 
 - **`KinematicModel`** (handle class): 符号 FK 薄封装。从 `EdgeGraph` 抽取末端 frame 的 `TSym` → 拆解 `PosExpr` / `RotExpr` → 提供 `eval(vals)` 和 `formulatePoseProblem(cfg)`。
-- **`ClosureSolver`** (handle class): 闭环约束构造器。对每个 closure cut 构建 6-DOF 符号残差 → `matlabFunction` 编译 → `fmincon` SQP 求解 IK。
+- **`ClosureSolver`** (handle class): 闭环约束构造器。支持两类 closure cut——L2 双 frame 切口与 L3 world 锚定切口（`anchor: world`，`world_binding` 零位自动标定）——构建 6-DOF 符号残差 → `matlabFunction` 编译 → `fmincon` SQP 求解 IK；`setTipTarget(ΔT)` 注入 tip 任务目标，known 关节值经构造参数代换。
 
 > 详见 [API_REFERENCE.md § +solver/](./API_REFERENCE.md#solver-求解层)
 
@@ -205,3 +205,4 @@ Expander 构造函数**始终**产生符号位姿（`Poses` 为 `frame → 4×4 
 - `addMateBidirectional`（双向）: 生成树边，参与 FK 传播
 - `addMateUnidirectional`（单向）: 闭环弦边，`exportEdges()` 排除，不参与 FK 传播，仅用于诊断残差
 - `ClosureSolver` 读取 `ExecutionConfig.ClosureCuts`（可来自 YAML 显式声明或从 `closed_mate` 自动推导），重新传播符号位姿后构建闭环残差
+- `anchor: world` 切口（L3 世界系闭环）：far 侧取 `world_binding` 标定常量（`T` 省略时零位自动标定），`setTipTarget(ΔT)` 将任务目标注入 far 常量侧

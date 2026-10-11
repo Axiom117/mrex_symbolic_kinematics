@@ -75,7 +75,7 @@ graph TD
 | `specs/dsl/connection-semantics.md` | Mate 变换公式、`roll` 参数、`closed` 标记、极性门控、L2 vs L3 闭环语义。 |
 | `specs/dsl/validation-checklist.md` | 校验分界清单：哪些项 Schema 可静态校验、哪些项需解释器加载模块库后校验。 |
 | `specs/dsl/case-conventions.md` | DSL 案例目录规范、README 模板、Mermaid 装配流程图 7 规则。 |
-| `specs/dsl/cases/open-chain-2r/` | 案例：2R 开环链（`robot_description.yaml` + `joint_config.yaml` + `README.md`） |
+| `specs/dsl/cases/open-chain-2r/` | 案例：2R 开环链（`robot_description.yaml` + `joint_config.yaml` + `execution-config.yaml` + `README.md`） |
 | `specs/dsl/cases/single-closed-loop/` | 案例：平行四边形单闭环（同上结构） |
 | `specs/dsl/cases/m-rex-3t1r/` | 案例：M-REx 3T1R 世界系闭环（同上结构） |
 
@@ -87,7 +87,7 @@ graph TD
 | `specs/ir/edge-types.md` | IR 边类型规范：fixed / joint / mate / closed_mate，变换公式、双向插入规则、exportEdges 过滤。以 `EdgeGraph.m` 为准。 |
 | `specs/ir/dsl-to-ir-mapping.md` | DSL→IR 完整 7 步映射管线：加载→参数注入→展开→连接→root fallback→FK 传播。以 `Expander.m` 为准。 |
 | `specs/ir/port-attachment.md` | Mate 连接在 IR 中的边表示：`addMateBidirectional`（生成树边）vs `addMateUnidirectional`（弦边）。DSL 层对应 `connection-semantics.md`。 |
-| `specs/ir/symbol-registry.md` | ⚪ **待写** — 变量注册表规范（project-overview A.3.3 引用但尚未创建） |
+| `specs/ir/symbol-registry.md` | 变量注册表规范：字段、类型分类（geometric/joint/task）、收集规则；以 `Expander.m` 为准。 |
 
 ### L6 · Schema 校验
 
@@ -163,9 +163,9 @@ graph TD
 | 状态 | 文件 |
 |------|------|
 | 🟢 **冻结（A.0）** | `modeling-conventions.md`, `terminology.md`, `conventions.yaml` — 地基文件，修改需全盘同步 |
-| 🟢 **活跃（A.1–A.3）** | `specs/modules/*.yaml`, `specs/dsl/*.md`, `specs/ir/*.md`, `specs/schema/*.yaml`, `ARCHITECTURE.md` — 随阶段推进持续迭代 |
+| 🟢 **活跃（A.1–A.4）** | `specs/modules/*.yaml`, `specs/dsl/*.md`, `specs/ir/*.md`, `specs/schema/*.yaml`, `ARCHITECTURE.md`, `API_REFERENCE.md` — 随阶段推进持续迭代 |
 | 🟡 **过时** | `/README.md` — 描述的目录结构与实际不符（`cases/`、`architecture/`、`design/`、`decisions/` 不存在）；`specs/README.md` — 同样描述不存在的子目录 |
-| ⚪ **待写** | `specs/ir/symbol-registry.md`（project-overview A.3.3 引用但尚未创建） |
+| ⚪ **待写** | —（无） |
 
 ---
 

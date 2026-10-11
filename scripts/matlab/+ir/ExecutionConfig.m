@@ -5,19 +5,25 @@ classdef ExecutionConfig
 %   partition variables into known/unknown sets for FK or IK solving.
 %
 %   For closed_loop mode, closure_cuts may be:
-%     - Explicitly declared in the YAML (required for L3 world系 loops, e.g. M-REx).
+%     - Explicitly declared in the YAML, in either of two forms:
+%         * frame-pair cut  : {near, far}            — L2 internal loops
+%         * world-anchored  : {near, anchor: world}  — L3 world系 loops (M-REx),
+%           where the far side is the near frame's world_binding calibration.
 %     - Auto-derived from EdgeGraph's closed_mate edges when omitted
 %       (for L2 internal loops where DSL already declares closed: true).
 %   Likewise, world_binding may be:
-%     - Explicitly declared in the YAML (required for L3 world系 loops).
+%     - Explicitly declared in the YAML (required when using anchor: world cuts).
+%       Each entry's T is optional; empty T means "auto-calibrate at zero pose"
+%       (resolved by the solver at construction time).
 %     - Omitted for L2 internal loops (ground handled by IR root nodes).
 %
 %   Usage:
 %       e = ir.Expander(dslYaml);
 %       cfg = ir.ExecutionConfig('execution-config.yaml', e.SymbolRegistry, e.EdgeGraph_);
-%       % cfg.Mode         — 'open_loop' or 'closed_loop'
-%       % cfg.EndFrame     — target frame ref (e.g. 'pipette.tip_origin')
-%       % cfg.ClosureCuts  — explicit or auto-derived cut pairs
+%       % cfg.Mode          — 'open_loop' or 'closed_loop'
+%       % cfg.EndFrame      — target frame ref (e.g. 'pipette.tip_origin')
+%       % cfg.ClosureCuts   — explicit (frame-pair / world-anchored) or auto cuts
+%       % cfg.WorldBindings — ground↔world calibrations (T may be [] = auto)
 %       % cfg.getSolvingDirection()   — 'FK' or 'IK'
 %       % [knownV, unknownV] = cfg.partitionVariables();
 %
@@ -29,9 +35,9 @@ classdef ExecutionConfig
         EndFrame      (1,:) char            % target frame ref (instance-qualified)
         KnownList     (:,1) cell            % cell array of known variable refs
         UnknownList   (:,1) cell            % cell array of unknown variable refs
-        WorldBindings (:,1) struct          % struct array: ground, T (4×4 double); empty for open_loop
+        WorldBindings (:,1) struct          % struct array: ground, T (4×4 double | [] = auto-calibrate); empty for open_loop
         ActuatedJoints (:,1) cell           % cell array of actuated joint refs; empty for closed_loop
-        ClosureCuts   (:,1) struct          % struct array: near, far, components; empty for open_loop
+        ClosureCuts   (:,1) struct          % struct array: near, far, anchor, components; empty for open_loop
         ClosureSource (1,:) char            % 'explicit' (from YAML), 'auto' (from closed_mate edges), or '' (open_loop)
         Tolerances    (1,1) struct          % struct: translation_mm, rotation_rad
         ConfigPath    (1,:) char            % absolute path to the loaded config file
@@ -111,7 +117,8 @@ classdef ExecutionConfig
                         'open_loop mode requires "actuated_joints" field.');
                     obj.ActuatedJoints = core.CommonUtils.asList(cfg.actuated_joints);
                     obj.WorldBindings = struct('ground', {}, 'T', {});
-                    obj.ClosureCuts = struct('near', {}, 'far', {}, 'components', {});
+                    obj.ClosureCuts = struct('near', {}, 'far', {}, ...
+                        'anchor', {}, 'components', {});
 
                     assert(~isfield(cfg, 'closure_cuts'), ...
                         'ir:ExecutionConfig:fieldConflict', ...
@@ -130,16 +137,40 @@ classdef ExecutionConfig
 
                     % --- closure_cuts: explicit YAML, auto-derived, or error ---
                     if isfield(cfg, 'closure_cuts')
-                        % explicit cuts from YAML (L3 world系 loops)
+                        % explicit cuts from YAML — two mutually exclusive forms:
+                        %   frame-pair cut  : {near, far}            (L2)
+                        %   world-anchored  : {near, anchor: world}  (L3)
                         cutsRaw = core.CommonUtils.asList(cfg.closure_cuts);
-                        obj.ClosureCuts = struct('near', {}, 'far', {}, 'components', {});
+                        obj.ClosureCuts = struct('near', {}, 'far', {}, ...
+                            'anchor', {}, 'components', {});
                         for i = 1:numel(cutsRaw)
                             cut = cutsRaw{i};
+                            assert(isfield(cut, 'near') && ~isempty(cut.near), ...
+                                'ir:ExecutionConfig:invalidCut', ...
+                                'closure_cuts(%d) must contain "near".', i);
+                            hasFar    = isfield(cut, 'far')    && ~isempty(cut.far);
+                            hasAnchor = isfield(cut, 'anchor') && ~isempty(cut.anchor);
+                            assert(xor(hasFar, hasAnchor), ...
+                                'ir:ExecutionConfig:invalidCut', ...
+                                ['closure_cuts(%d): exactly one of "far" (frame-pair) ' ...
+                                 'or "anchor" (world-anchored) must be present.'], i);
+                            if hasAnchor
+                                anchorVal = cut.anchor;
+                                assert(strcmp(anchorVal, 'world'), ...
+                                    'ir:ExecutionConfig:invalidCut', ...
+                                    'closure_cuts(%d): unsupported anchor "%s" (only "world").', ...
+                                    i, anchorVal);
+                                farRef = '';
+                            else
+                                anchorVal = '';
+                                farRef = cut.far;
+                            end
                             comps = core.CommonUtils.field(cut, 'components', ...
                                 {'tx','ty','tz','rx','ry','rz'});
                             obj.ClosureCuts(end+1) = struct( ... %#ok<AGROW>
                                 'near', cut.near, ...
-                                'far', cut.far, ...
+                                'far', farRef, ...
+                                'anchor', anchorVal, ...
                                 'components', {comps});
                         end
                         obj.ClosureSource = 'explicit';
@@ -156,7 +187,8 @@ classdef ExecutionConfig
                              'Either declare closure_cuts explicitly (L3 loop) ' ...
                              'or ensure DSL contains closed: true connections (L2 loop).']);
 
-                        obj.ClosureCuts = struct('near', {}, 'far', {}, 'components', {});
+                        obj.ClosureCuts = struct('near', {}, 'far', {}, ...
+                            'anchor', {}, 'components', {});
                         for i = 1:numel(closedMates)
                             % closed_mate edges are directional: socket → plug.
                             % The socket side (from) is on the spanning tree;
@@ -165,7 +197,8 @@ classdef ExecutionConfig
                             % bidirectional mate edges).
                             obj.ClosureCuts(end+1) = struct( ... %#ok<AGROW>
                                 'near', closedMates(i).from, ...   % socket (tree side)
-                                'far',  closedMates(i).to, ...     % plug  (chord side)
+                                'far',  closedMates(i).to, ...     % plug  (chord end)
+                                'anchor', '', ...
                                 'components', {{'tx','ty','tz','rx','ry','rz'}});
                         end
                         obj.ClosureSource = 'auto';
@@ -183,17 +216,44 @@ classdef ExecutionConfig
                         obj.WorldBindings = struct('ground', {}, 'T', {});
                         for i = 1:numel(wbRaw)
                             wb = wbRaw{i};
-                            assert(isfield(wb, 'ground') && isfield(wb, 'T'), ...
+                            assert(isfield(wb, 'ground') && ~isempty(wb.ground), ...
                                 'ir:ExecutionConfig:invalidWorldBinding', ...
-                                'world_binding entry %d must contain "ground" and "T".', i);
+                                'world_binding entry %d must contain "ground".', i);
+                            if isfield(wb, 'T') && ~isempty(wb.T)
+                                % explicit calibration: normalize nested
+                                % sequence to a 4×4 double matrix
+                                Tbind = localAsMatrix4x4(wb.T, i);
+                            else
+                                % T omitted: auto-calibrate at zero pose
+                                % (resolved by solver.ClosureSolver)
+                                Tbind = [];
+                            end
                             obj.WorldBindings(end+1) = struct( ... %#ok<AGROW>
                                 'ground', wb.ground, ...
-                                'T', wb.T);
+                                'T', Tbind);
                         end
                     else
                         % L2 internal loop: ground handled by IR root nodes,
                         % no explicit world_binding needed.
                         obj.WorldBindings = struct('ground', {}, 'T', {});
+                    end
+
+                    % --- cross-check: world-anchored cuts need a declared binding ---
+                    if any(strcmp({obj.ClosureCuts.anchor}, 'world'))
+                        assert(~isempty(obj.WorldBindings), ...
+                            'ir:ExecutionConfig:anchorNotBound', ...
+                            ['closure_cuts declare anchor "world" but ' ...
+                             'world_binding is missing or empty.']);
+                        grounds = {obj.WorldBindings.ground};
+                        for i = 1:numel(obj.ClosureCuts)
+                            if strcmp(obj.ClosureCuts(i).anchor, 'world')
+                                assert(ismember(obj.ClosureCuts(i).near, grounds), ...
+                                    'ir:ExecutionConfig:anchorNotBound', ...
+                                    ['closure_cuts(%d): anchor "world" requires near ' ...
+                                     'frame "%s" to appear in world_binding.'], ...
+                                    i, obj.ClosureCuts(i).near);
+                            end
+                        end
                     end
             end
 
@@ -339,4 +399,30 @@ classdef ExecutionConfig
 
     end
 
+end
+
+%% ---- local functions (not methods) ----
+
+function M = localAsMatrix4x4(raw, entryIdx)
+%LOCALASMATRIX4X4  Normalize a YAML-parsed nested sequence to a 4×4 double.
+%   RAW      : cell of 4 rows; each row a cell of 4 numeric scalars
+%   ENTRYIDX : 1-based world_binding entry index (for error messages)
+    assert(iscell(raw) && numel(raw) == 4, ...
+        'ir:ExecutionConfig:invalidWorldBinding', ...
+        'world_binding entry %d: "T" must be a 4×4 matrix (4 rows).', entryIdx);
+    M = zeros(4, 4);
+    for r = 1:4
+        row = raw{r};
+        assert(iscell(row) && numel(row) == 4, ...
+            'ir:ExecutionConfig:invalidWorldBinding', ...
+            'world_binding entry %d: "T" row %d must contain 4 values.', entryIdx, r);
+        for c = 1:4
+            v = row{c};
+            assert(isnumeric(v) && isscalar(v), ...
+                'ir:ExecutionConfig:invalidWorldBinding', ...
+                'world_binding entry %d: "T" element (%d,%d) must be numeric.', ...
+                entryIdx, r, c);
+            M(r, c) = v;
+        end
+    end
 end

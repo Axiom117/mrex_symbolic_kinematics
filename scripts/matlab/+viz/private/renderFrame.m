@@ -51,6 +51,7 @@ function unplaced = renderFrame(ax, poses, inst, connInfo, libDir, repoRoot, ...
             end
             Tb = poses(b.node);
             geomPath = core.PathUtils.resolveGeometryPath(b.geometry, libDir, repoRoot);
+            drewGeom = false;
             if ~isempty(b.geometry) && ~isempty(geomPath)
                 % use cached geometry when available (animation mode);
                 % otherwise import from disk (static viz mode)
@@ -61,7 +62,21 @@ function unplaced = renderFrame(ax, poses, inst, connInfo, libDir, repoRoot, ...
                 end
                 if ~isempty(geom)
                     core.VizHelpers.patchGeometry(ax, Tb, geom, col, 0.8);
+                    drewGeom = true;
                 end
+            end
+            if ~drewGeom
+                % fallback for bodies without (resolvable) geometry — e.g. the
+                % Manipulator drive stages: translucent box so the body stays
+                % visible in both static and animation rendering.
+                hs = 0.30 * L;   % half-size [mm], scaled by characteristic length
+                V = hs * [-1 -1 -1; 1 -1 -1; 1 1 -1; -1 1 -1; ...
+                          -1 -1  1; 1 -1  1; 1 1  1; -1 1  1];
+                F = [1 2 6 5; 2 3 7 6; 3 4 8 7; 4 1 5 8; 1 2 3 4; 5 6 7 8];
+                Vw = (Tb(1:3, 1:3) * V.' + Tb(1:3, 4)).';
+                patch(ax, 'Vertices', Vw, 'Faces', F, ...
+                    'FaceColor', col, 'FaceAlpha', 0.35, ...
+                    'EdgeColor', col * 0.7, 'EdgeAlpha', 0.9);
             end
         end
 

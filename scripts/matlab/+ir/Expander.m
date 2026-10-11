@@ -132,13 +132,13 @@ classdef Expander < handle
 
                 % -- connection parameters: roll and symmetry --
                 roll = core.CommonUtils.field(cn, 'roll', 0);
-                sym = core.CommonUtils.field(sk, 'symmetry', 4);
+                nSym = core.CommonUtils.field(sk, 'symmetry', 4);
                 isClosed = isequal(core.CommonUtils.field(cn, 'closed', false), true);
 
                 if ~isClosed
-                    obj.EdgeGraph_.addMateBidirectional(sk.node, pl.node, roll, sym);
+                    obj.EdgeGraph_.addMateBidirectional(sk.node, pl.node, roll, nSym);
                 else
-                    obj.EdgeGraph_.addMateUnidirectional(sk.node, pl.node, roll, sym);
+                    obj.EdgeGraph_.addMateUnidirectional(sk.node, pl.node, roll, nSym);
                 end
 
                 obj.ConnectionInfo(end+1) = struct( ...
@@ -154,11 +154,14 @@ classdef Expander < handle
             obj.Poses = obj.EdgeGraph_.propagate();
 
             % ---- fill task frame symHandles from propagated Poses ----
+            % NOTE: sym() wrapping normalizes numeric poses to constant sym
+            % (e.g. the FK root seed frame I₄), keeping the registry contract
+            % "task symHandle is sym" (specs/ir/symbol-registry.md §2).
             for i = 1:numel(obj.SymbolRegistry_)
                 if strcmp(obj.SymbolRegistry_(i).type, 'task')
                     frameName = obj.SymbolRegistry_(i).name;
                     if isKey(obj.Poses, frameName)
-                        obj.SymbolRegistry_(i).symHandle = obj.Poses(frameName);
+                        obj.SymbolRegistry_(i).symHandle = sym(obj.Poses(frameName));
                     end
                 end
             end

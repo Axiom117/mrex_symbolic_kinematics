@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=../../../schema/execution-config.schema.yaml
+# m-rex-3t1r 执行配置 — 3T1R 全任务空间模式（案例唯一配置）
+#
+# 两个内部转动关节 joint_1.q / joint_2.q 移入 unknown，形成 8 未知量 / 12 分量的
+# 完整闭环系统；释放内部关节后机构获得完整 3T1R 能力（tip 任务子空间 =
+# 3 平移 ⊕ 绕 X 转动；闭链流形维数 = 4）。
+#
+# 原 A.4b 的 6 未知量 3T 基线配置已于配置合并中移除；其 KNOWNVALUES 与方形
+# 6×6 基线覆盖保留在 tests/pipeline/test_closure_solver_m_rex_3t1r.m 的 tmp
+# fixture 中（2026-10-11）。
+#
+# 重要：本文件只规定 L3 执行语义（世界绑定 / 切口 / 变量分区 / 容差）。
+# demo 运动轨迹（φ 扫描 + 圆形平移）【不在本文件】——它由
+# tests/pipeline/test_animation_m_rex_3t1r.m 顶部参数区以闭式构造生成，
+# 作为「任务输入」传入求解器/动画（与 single-closed-loop 测试内联轨迹同例）。
+#
+# world_binding 的 T 省略：由零位构型 FK 自动标定（solver.ClosureSolver）。
+
+mode: closed_loop
+endFrame: pipette.tip_origin
+
+world_binding:
+  - ground: manipulator_L.ground
+  - ground: manipulator_R.ground
+
+closure_cuts:
+  - near: manipulator_L.ground
+    anchor: world
+    components: [tx, ty, tz, rx, ry, rz]
+  - near: manipulator_R.ground
+    anchor: world
+    components: [tx, ty, tz, rx, ry, rz]
+
+known:
+  - pipette.tip_origin
+
+unknown:
+  - manipulator_L.dx
+  - manipulator_L.dy
+  - manipulator_L.dz
+  - manipulator_R.dx
+  - manipulator_R.dy
+  - manipulator_R.dz
+  - joint_1.q
+  - joint_2.q
+
+tolerances:
+  translation_mm: 0.001
+  rotation_rad: 0.001
