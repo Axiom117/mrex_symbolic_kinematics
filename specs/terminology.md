@@ -51,8 +51,9 @@
 | `Manipulator` | 驱动接口模块 | 把外部驱动器（如 microsupport）物化为 L1 关节模块；3-DOF 笛卡尔平移（三个 `prismatic` 串联，变量 `dx`/`dy`/`dz`），并把机构接地到 `world`（见 `§5.6`） |
 | `instance` | 实例 | 模块类的一次具体化，带实例名与参数 |
 | `connection` | 连接 | 两端口间的 mate 关系（见连接类型） |
-| `world` | 世界系 | 机构图唯一根坐标系 |
-| `endFrame` | 末端系 | FK/IK 输出的任务坐标系 |
+| `world` | 世界系 | 机构图唯一根坐标系；缺省与 FK root 零位姿态重合，声明 `tool_frame` 后锚定到工具坐标系零位姿态 |
+| `endFrame` | 末端系 | FK/IK 输出的任务坐标系（图内物理帧） |
+| `toolFrame` | 工具坐标系 | L3 可选输入/输出参考系（`execution-config.yaml` 的 `tool_frame` 块，定义相对 `endFrame` 的固定变换）。声明后“世界系 ≡ 工具坐标系零位姿态”，目标位姿按左乘世界系增量表达（$\Delta T = U\cdot\Delta_{\text{tool}}\cdot U^{-1}$，$U = T_{\text{root}\leftarrow\text{tool}}$）。虚拟接口帧，不是实体坐标系；与 `root` 标记的 tip 参考帧区分（见 `dsl/connection-semantics.md` §6.5） |
 
 ## 端口语义标签（可选）
 

@@ -19,6 +19,24 @@
 mode: closed_loop
 endFrame: pipette.tip_origin
 
+# ---- L3 工具坐标系（tool_frame，A.5.1.5）—— 本案例的参考声明 ----
+# 声明后「世界系 ≡ 工具坐标系零位姿态」：工具系初始方向与世界系平行，
+# pipette tip（endFrame）零位姿态自动派生为 U⁻¹ = Ry(−45°)（即设计例的
+# "0,0,0,0,-45°,0"）。用户面目标位姿/位姿报告以工具系表达：
+#   输入（左乘世界系增量）：solver.ClosureSolver.setToolTarget(Δ_tool)
+#       ΔT_tip = U · Δ_tool · U⁻¹
+#   输出：solver.ClosureSolver.evalToolPose(q)
+#       D(q) = U⁻¹ · T_rootWorld(q) · U
+# 其中 U = T_root←tool = T_root←endFrame · T_endFrame←tool；本案例 root = endFrame
+# （pipette.tip_origin），故 U = T_endFrame←tool = Ry(45°)（工具系相对 tip 绕其
+# y 轴 +45°）。角分量数值 = rad，"45deg" 为显式单位写法（schema §scalarOrAngle）；
+# 要求 root→endFrame 位姿链无关节（本案例满足）。
+# 删除/注释本块 → 回到历史行为：世界系 ≡ tip 零位（U = I₄）。语义详见
+# specs/dsl/connection-semantics.md §6.5。
+tool_frame:
+  transform:
+    rotation: { rpy: [0, 45deg, 0] }
+
 world_binding:
   - ground: manipulator_L.ground
   - ground: manipulator_R.ground

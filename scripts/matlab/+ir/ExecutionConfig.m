@@ -17,6 +17,21 @@ classdef ExecutionConfig
 %       (resolved by the solver at construction time).
 %     - Omitted for L2 internal loops (ground handled by IR root nodes).
 %
+%   Tool frame (optional, L3): a tool_frame block declares the user-facing
+%   task/input frame as a fixed transform relative to endFrame.  When present,
+%   the world is re-anchored to the tool-frame zero pose ("initial orientation
+%   parallel to the world axes"), and all user-facing target poses / pose
+%   reports are expressed in the tool frame:
+%       - input (left-multiplied world-frame increment):
+%             ΔT_internal = U · Δ_tool · U⁻¹
+%       - output:  D(q) = U⁻¹ · T_rootWorld(q) · U
+%   with U = T_root←tool = T_root←endFrame · T_endFrame←tool (requires a
+%   joint-free root→endFrame chain; enforced by solver.ClosureSolver).
+%   The resolved transform is exposed as cfg.ToolFrame:
+%       .Present — logical, true when the YAML declares tool_frame
+%       .T       — 4×4 double = T_endFrame←tool (angles normalized to rad)
+%   When absent, behavior is unchanged (world ≡ endFrame zero pose).
+%
 %   Usage:
 %       e = ir.Expander(dslYaml);
 %       cfg = ir.ExecutionConfig('execution-config.yaml', e.SymbolRegistry, e.EdgeGraph_);
@@ -24,6 +39,7 @@ classdef ExecutionConfig
 %       % cfg.EndFrame      — target frame ref (e.g. 'pipette.tip_origin')
 %       % cfg.ClosureCuts   — explicit (frame-pair / world-anchored) or auto cuts
 %       % cfg.WorldBindings — ground↔world calibrations (T may be [] = auto)
+%       % cfg.ToolFrame     — resolved tool-frame transform (Present=false when absent)
 %       % cfg.getSolvingDirection()   — 'FK' or 'IK'
 %       % [knownV, unknownV] = cfg.partitionVariables();
 %
@@ -39,6 +55,7 @@ classdef ExecutionConfig
         ActuatedJoints (:,1) cell           % cell array of actuated joint refs; empty for closed_loop
         ClosureCuts   (:,1) struct          % struct array: near, far, anchor, components; empty for open_loop
         ClosureSource (1,:) char            % 'explicit' (from YAML), 'auto' (from closed_mate edges), or '' (open_loop)
+        ToolFrame     (1,1) struct          % struct: Present (logical), T (4×4 double = T_endFrame←tool; angles in rad)
         Tolerances    (1,1) struct          % struct: translation_mm, rotation_rad
         ConfigPath    (1,:) char            % absolute path to the loaded config file
     end
@@ -257,6 +274,12 @@ classdef ExecutionConfig
                     end
             end
 
+            % ---- tool_frame (optional, L3 task/input frame) ----
+            obj.ToolFrame = struct('Present', false, 'T', eye(4));
+            if isfield(cfg, 'tool_frame')
+                obj.ToolFrame = localParseToolFrame(cfg.tool_frame);
+            end
+
             % ---- tolerances (optional, with defaults) ----
             obj.Tolerances = struct( ...
                 'translation_mm', 0.001, ...
@@ -424,5 +447,70 @@ function M = localAsMatrix4x4(raw, entryIdx)
                 entryIdx, r, c);
             M(r, c) = v;
         end
+    end
+end
+
+function tf = localParseToolFrame(raw)
+%LOCALPARSETOOLFRAME  Parse the optional L3 tool_frame block.
+%   RAW : struct from the YAML reader — fields per
+%         specs/schema/execution-config.schema.yaml $defs/toolFrame.
+%   Returns struct: Present = true, T = T_endFrame←tool (4×4 double).
+%   Angle tokens: numeric = rad (internal convention, §8); strings may
+%   carry an explicit unit suffix ("45deg" / "0.7854rad").
+    assert(isstruct(raw) && isfield(raw, 'transform') && isstruct(raw.transform), ...
+        'ir:ExecutionConfig:invalidToolFrame', ...
+        'tool_frame must contain a "transform" object.');
+
+    tr = raw.transform;
+
+    % ---- translation (mm) ----
+    t = zeros(3, 1);
+    if isfield(tr, 'translation') && ~isempty(tr.translation)
+        t = core.CommonUtils.evalVec(tr.translation, struct());
+    end
+
+    % ---- rotation (align / rpy / axis_angle), delegating to RigidBodyMath ----
+    R = eye(3);
+    if isfield(tr, 'rotation') && ~isempty(tr.rotation)
+        rot = localNormalizeRotationAngles(tr.rotation);
+        R = core.RigidBodyMath.rot(rot, struct());
+    end
+
+    tf = struct('Present', true, 'T', [R, t; 0 0 0 1]);
+end
+
+function rot = localNormalizeRotationAngles(rot)
+%LOCALNORMALIZEROTATIONANGLES  Convert angle tokens to numeric rad in-place.
+%   After normalization RigidBodyMath.rot evaluates the struct with empty
+%   params (pure numeric evaluation, no symbolic expressions at L3).
+    if isfield(rot, 'rpy') && ~isempty(rot.rpy)
+        r = rot.rpy;
+        if ~iscell(r); r = num2cell(r); end
+        for k = 1:numel(r)
+            r{k} = localEvalAngleToken(r{k});
+        end
+        rot.rpy = r;
+    elseif isfield(rot, 'axis_angle') && ~isempty(rot.axis_angle)
+        aa = rot.axis_angle;
+        aa.q = localEvalAngleToken(aa.q);
+        rot.axis_angle = aa;
+    end
+    % align carries no angle tokens
+end
+
+function v = localEvalAngleToken(tok)
+%LOCALEVALANGLETOKEN  One angle token → numeric rad.
+%   numeric : interpreted as rad (internal convention, §8)
+%   "45deg" : degrees with explicit unit label → rad
+%   "0.7854rad" : rad with explicit unit label
+    if iscell(tok) && isscalar(tok); tok = tok{1}; end
+    if isnumeric(tok); v = double(tok); return; end
+    s = strtrim(char(tok));
+    if endsWith(lower(s), 'deg')
+        v = core.CommonUtils.evalScalar(s(1:end-3), struct()) * pi / 180;
+    elseif endsWith(lower(s), 'rad')
+        v = core.CommonUtils.evalScalar(s(1:end-3), struct());
+    else
+        v = core.CommonUtils.evalScalar(s, struct());
     end
 end

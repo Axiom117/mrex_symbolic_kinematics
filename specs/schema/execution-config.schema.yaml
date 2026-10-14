@@ -19,6 +19,11 @@
 #     ground frame，且须匹配 EdgeGraph 中的 closed_mate 边
 #   - closure_cuts 中 anchor: world（L3 world 锚定切口）的 near 必须命中
 #     world_binding 的某条 ground；binding 的 T 省略时由求解器零位自动标定
+#   - tool_frame（L3 工具坐标系）：transform 相对 endFrame 定义；rpy / axis_angle
+#     的角分量接受数值（按内部约定 = rad）或带显式单位的字符串（如 "45deg"、
+#     "0.7854rad"），由 ExecutionConfig 归一化为 rad
+#   - tool_frame 声明后“世界系 ≡ 工具坐标系零位姿态”；求解器要求 FK root→endFrame
+#     位姿链无关节（刚性链），否则报错（solver:ClosureSolver:flexibleToolFrame）
 
 title: ExecutionConfig
 description: >-
@@ -145,6 +150,101 @@ $defs:
             - ry
             - rz
 
+  scalarOrAngle:
+    description: >-
+      角度/数值分量：数值按内部约定解释（rad，§8），或带显式单位的字符串
+      （如 "45deg"、"0.7854rad"），由 ExecutionConfig 归一化为 rad。
+    type: [number, string]
+
+  toolFrameRotation:
+    description: >-
+      工具坐标系旋转（相对 endFrame），三种等价表示任选其一，与模块定义同构。
+      rpy 为 Z-Y-X 内旋欧拉角（§8）；align 为双轴对齐规则（§9.4）。
+    oneOf:
+      - type: object
+        additionalProperties: false
+        required: [rpy]
+        properties:
+          rpy:
+            description: Z-Y-X 内旋欧拉角 [Rx, Ry, Rz]。
+            type: array
+            minItems: 3
+            maxItems: 3
+            items:
+              $ref: "#/$defs/scalarOrAngle"
+      - type: object
+        additionalProperties: false
+        required: [axis_angle]
+        properties:
+          axis_angle:
+            description: 权威表示：轴 omega + 转角 q（Rodrigues，§8）。
+            type: object
+            additionalProperties: false
+            required: [omega, q]
+            properties:
+              omega:
+                description: 单位轴向量。
+                type: array
+                minItems: 3
+                maxItems: 3
+                items:
+                  type: number
+              q:
+                $ref: "#/$defs/scalarOrAngle"
+      - type: object
+        additionalProperties: false
+        required: [align]
+        properties:
+          align:
+            description: 双轴对齐规则（§9.4）：a、b 各为 [源轴, 目标轴]，第三轴由右手系唯一推出。
+            type: object
+            additionalProperties: false
+            required: [a, b]
+            properties:
+              a:
+                type: array
+                minItems: 2
+                maxItems: 2
+                items:
+                  type: string
+                  pattern: "^[+-][XYZ]$"
+              b:
+                type: array
+                minItems: 2
+                maxItems: 2
+                items:
+                  type: string
+                  pattern: "^[+-][XYZ]$"
+
+  toolFrame:
+    description: >-
+      L3 工具坐标系（tool frame）声明：定义工具坐标系相对 endFrame 的固定变换。
+      声明后“世界系 ≡ 工具坐标系零位姿态”——初始方向与世界系平行，所有用户面
+      目标位姿/位姿报告以工具坐标系表达：
+        - 输入（默认左乘世界系增量）：ΔT_internal = U · Δ_tool · U⁻¹
+        - 输出：D(q) = U⁻¹ · T_rootWorld(q) · U
+      其中 U = T_root←tool = T_root←endFrame · T_endFrame←tool（要求 root→endFrame
+      位姿链无关节，即工具刚性固连）。省略本块时行为与历史一致
+      （世界系 ≡ 末端参考系零位）。
+    type: object
+    additionalProperties: false
+    required: [transform]
+    properties:
+      transform:
+        description: 工具坐标系相对 endFrame 的固定变换（先平移后旋转，与模块固定变换同构，§8）。
+        type: object
+        additionalProperties: false
+        properties:
+          translation:
+            description: 平移 [x, y, z]，单位 mm。
+            type: array
+            minItems: 3
+            maxItems: 3
+            items:
+              type: number
+          rotation:
+            $ref: "#/$defs/toolFrameRotation"
+
   tolerances:
     description: 数值求解收敛阈值。
     type: object
@@ -224,6 +324,13 @@ properties:
     minItems: 1
     items:
       $ref: "#/$defs/closureCut"
+
+  tool_frame:
+    description: >-
+      L3 工具坐标系（可选）。声明后世界系锚定到工具坐标系零位姿态，
+      用户面目标位姿在工具坐标系中表达（语义见 $defs/toolFrame）。
+      缺省 = 历史行为（世界系 ≡ endFrame 零位）。
+    $ref: "#/$defs/toolFrame"
 
   tolerances:
     description: 数值求解收敛阈值。

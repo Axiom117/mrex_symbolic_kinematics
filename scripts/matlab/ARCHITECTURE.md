@@ -18,7 +18,9 @@ graph TB
         direction LR
         mech["<b>mechanism.m</b><br/>机构装配 + 渲染<br/>委托 Expander → evaluateNumeric()"]
         mod["<b>module.m</b><br/>单模块可视化<br/>直接操作 EdgeGraph"]
-        anim["<b>animate.m</b><br/>轨迹动画<br/>预编译 + 逐帧渲染"]
+        anim["<b>animate.m</b><br/>兼容包装<br/>Expander → 序列 → play"]
+        play["<b>play.m</b><br/>位姿序列播放器<br/>纯渲染（无运动学）"]
+        scenespec["<b>sceneSpec.m</b><br/>静态场景快照<br/>instances + 几何缓存"]
     end
 
     %% ── 中间表示层 ──
@@ -34,6 +36,7 @@ graph TB
         direction LR
         kinmodel["<b>KinematicModel</b><br/>符号 FK 薄封装<br/>eval + 问题构造"]
         closuresolver["<b>ClosureSolver</b><br/>闭环残差<br/>+ fmincon 求解"]
+        buildseq["<b>buildPoseSequence</b><br/>位姿序列产物<br/>Q → PoseFrames"]
     end
 
     %% ── 核心计算层 ──
@@ -43,6 +46,12 @@ graph TB
 
     %% ── 调用关系 ──
     mech & anim -->|"new Expander()"| expander
+    anim -->|"Q → PoseFrames"| buildseq
+    anim -->|"静态场景"| scenespec
+    anim -->|"viz.play"| play
+    buildseq -.->|"evaluateNumericDirect 逐帧"| expander
+    scenespec -.->|"只读快照"| expander
+    play -.->|"纯数据：Frames/Trail + Scene"| buildseq
     expander   -->|"持有 EdgeGraph_ 句柄"| edgegraph
     edgegraph  -->|"exportEdges() → propagatePoses()"| poseprop
     expander   -.->|"输出 SymbolRegistry"| execcfg
@@ -52,15 +61,15 @@ graph TB
     closuresolver -->|"读取 sym 位姿 + 残差"| edgegraph
     mod        -->|"直接操作"| edgegraph
 
-    class mech,mod,anim viz
+    class mech,mod,anim,play,scenespec viz
     class expander,edgegraph,execcfg ir
-    class kinmodel,closuresolver solver
+    class kinmodel,closuresolver,buildseq solver
     class poseprop core
 ```
 
 > **层间调用链**：
 > 1. `mechanism.m` / `animate.m` 构造 `Expander(dslYaml)` → 构造函数自动完成 DSL→IR 符号展开和 FK 传播
-> 2. 渲染前调用 `e.evaluateNumeric()` → `sym` 位姿 → `double` 位姿
+> 2. 渲染前调用 `e.evaluateNumeric()` → `sym` 位姿 → `double` 位姿；`animate.m` 自 A.5.2.0 起为分层包装（`buildPoseSequence` 产位姿序列 → `play` 消费渲染）
 > 3. `Expander` 内部持有 `EdgeGraph_` 句柄，所有实例展开/连接处理均写入该图
 > 4. `EdgeGraph.propagate()` 委托 `PosePropagator.propagatePoses()` 执行纯数学 FK
 > 5. `module.m` 跳过 Expander，直接调用 `EdgeGraph` 方法构建单模块内部图
@@ -74,7 +83,9 @@ graph TB
 
 - **`mechanism.m`**: 委托 `ir.Expander` 完成符号展开，调用 `evaluateNumeric()` 代入数值后渲染 triad / geometry / mate 诊断线。自身只读 Expander 的公开属性。
 - **`module.m`**: 单模块可视化，直接调用 `ir.EdgeGraph` 方法（不经过 Expander），使用数值管线。
-- **`animate.m`**: 轨迹动画，构建一次 Expander → 预编译位姿函数 → 逐帧代入数值渲染，支持播放控件。
+- **`animate.m`**: 轨迹动画兼容包装（A.5.2.0）＝ `ir.Expander` → `solver.buildPoseSequence` → `viz.sceneSpec` → `viz.play`；外部签名不变。
+- **`play.m`**: 位姿序列纯播放器。只消费 `(PoseSequence, SceneSpec)` 纯数据，逐帧渲染循环 / 播放控件 / 轨迹叠加；**不做运动学计算**。
+- **`sceneSpec.m`**: 从 `Expander` 提取静态场景快照（instances / 连接 / 几何缓存 / 特征尺度）。
 - **`allModules.m`**: 批量校验所有模块 YAML。
 
 > 详见 [API_REFERENCE.md § +viz/](./API_REFERENCE.md#viz-可视化层)
@@ -91,6 +102,7 @@ graph TB
 
 - **`KinematicModel`** (handle class): 符号 FK 薄封装。从 `EdgeGraph` 抽取末端 frame 的 `TSym` → 拆解 `PosExpr` / `RotExpr` → 提供 `eval(vals)` 和 `formulatePoseProblem(cfg)`。
 - **`ClosureSolver`** (handle class): 闭环约束构造器。支持两类 closure cut——L2 双 frame 切口与 L3 world 锚定切口（`anchor: world`，`world_binding` 零位自动标定）——构建 6-DOF 符号残差 → `matlabFunction` 编译 → `fmincon` SQP 求解 IK；`setTipTarget(ΔT)` 注入 tip 任务目标，known 关节值经构造参数代换。
+- **`buildPoseSequence`** (函数): FK 位姿序列构建器（A.5.2.0）。`Q` → 逐帧全体 frame 位姿（`PoseSequence`，可选世界锚定共轭）——「求解器 → 位姿数据 → 渲染」数据流中的计算层产物。
 
 > 详见 [API_REFERENCE.md § +solver/](./API_REFERENCE.md#solver-求解层)
 

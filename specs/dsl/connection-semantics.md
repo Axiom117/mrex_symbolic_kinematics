@@ -213,9 +213,52 @@ $$T_{\text{residual},i} = T_{\text{near},i}(q)^{-1} \cdot (\Delta T^{-1} \cdot T
 
 - $T_{\text{bind},i}$：零位构型标定值——`world_binding.T` 显式给出，或省略后由求解器
   在全部关节零位下自动计算（显式值偏离自动标定 > 1e-6 时报错）。
-- $\Delta T$：tip 任务目标（`setTipTarget`，默认 $I_4$ —— 纯闭环/零位验证）。
+- $\Delta T$：tip 任务目标（`setTipTarget`，默认 $I_4$ —— 纯闭环/零位验证；
+  声明 `tool_frame` 时用户面接口为 `setToolTarget`，见 §6.5）。
 - 实例：`cases/m-rex-3t1r/execution-config.yaml`；端到端验证：
   `tests/pipeline/test_closure_solver_m_rex_3t1r.m`。
+
+---
+
+### 6.5 L3 工具坐标系（`tool_frame`，2026-10-14）
+
+> 实现：`+ir/ExecutionConfig.m`（解析/求值）、`+solver/ClosureSolver.m`（语义）；
+> 验证：`tests/pipeline/test_tool_frame_m_rex_3t1r.m`。
+
+**动机**：`endFrame`（如 `pipette.tip_origin`）是绑定在工具上的物理参考帧。若零位
+构型下工具姿态相对观察者不平行（如 pipette 初始倾斜 −45°），直接以 endFrame 表达
+任务目标不直观——“绕世界 z 轴旋转”在倾斜坐标系里会变成混合轴旋转。
+
+**定义**：`tool_frame` 块声明一个虚拟输入/输出参考系，由相对 `endFrame` 的固定变换
+$U_{\text{rel}} = T_{\text{endFrame}\leftarrow\text{tool}}$ 定义（与模块固定变换同构，
+支持 `align` / `rpy` / `axis_angle`；角分量数值按内部约定 = rad，或带显式单位的字符串
+如 `"45deg"` / `"0.7854rad"`）：
+
+```yaml
+tool_frame:
+  transform:
+    rotation: { rpy: [0, 45deg, 0] }
+```
+
+**语义（世界系重锚定）**：声明后，**世界系 ≡ 工具坐标系零位姿态**：工具系零位姿态在
+世界中为 $I_4$（初始方向与世界系平行），而 endFrame 零位姿态在世界中自动派生为
+$U_{\text{rel}}^{-1}$（上例即 `0,0,0,0,−45°,0`）。记
+$U = T_{\text{root}\leftarrow\text{tool}} = T_{\text{root}\leftarrow\text{endFrame}} \cdot U_{\text{rel}}$：
+
+| 操作 | 公式 | 接口 |
+|------|------|------|
+| 输入：左乘世界系增量（默认语义） | $\Delta T_{\text{tip}} = U \cdot \Delta_{\text{tool}} \cdot U^{-1}$ | `ClosureSolver.setToolTarget` |
+| 输出：位姿报告 | $D(q) = U^{-1} \cdot T_{\text{rootWorld}}(q) \cdot U$ | `ClosureSolver.evalToolPose` |
+
+**约束与兼容**：
+
+- 要求 root→endFrame 位姿链无关节（工具刚性固连），否则报
+  `solver:ClosureSolver:flexibleToolFrame`。
+- 未声明 `tool_frame` 时行为与历史完全一致（世界 ≡ endFrame 零位，$U = I_4$，
+  `setToolTarget` ≡ `setTipTarget`）。
+- Tool frame 为 L3 虚拟帧，不进入 IR / symbolRegistry；`endFrame` 仍指向物理帧。
+- 实例：`cases/m-rex-3t1r/execution-config.yaml` 已默认声明该块（`rpy: [0, 45deg, 0]`）——
+  「工具系零位与世界系对齐 + tip 初始倾斜 −45°」的参考用法（删除/注释该块即回到历史行为）。
 
 ---
 

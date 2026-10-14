@@ -658,9 +658,87 @@ flowchart LR
 
 ---
 
-#### A.5.2 · 求解器标准化与鲁棒性
+#### A.5.1.5 · L3 工具坐标系（world-aligned 任务输入帧）
 
-**目标**：将 A.4 中散落在 `ClosureSolver` 和测试脚本中的求解逻辑统一为标准化接口，增加边界管理、初值策略和收敛诊断能力。
+> **状态（2026-10-14）**：✅ 已完成。`execution-config` 新增可选 `tool_frame` 块，声明后
+> 「世界系 ≡ 工具坐标系零位姿态」，全部用户面目标位姿/位姿报告改以工具坐标系表达。
+> m-rex-3t1r 案例配置已默认声明该块（`rpy: [0, 45deg, 0]`，作为倾斜参考用法）。
+
+**动机**：`endFrame`（如 `pipette.tip_origin`）是绑定在工具上的物理参考帧；若零位构型下
+工具姿态相对观察者不平行（如 pipette 初始倾斜 −45°），直接以 endFrame 表达任务目标不直观
+（“绕世界 z 轴旋转”在倾斜坐标系里会变成混合轴旋转）。
+
+**设计**（数学核心：共轭变换；语义细节见 `specs/dsl/connection-semantics.md` §6.5）：
+
+- **配置**：`tool_frame.transform` 定义 $U_{\text{rel}} = T_{\text{endFrame}\leftarrow\text{tool}}$
+  （与模块固定变换同构：`align`/`rpy`/`axis_angle`；角分量数值 = rad，或 `"45deg"` 显式单位）
+- **语义**：世界系重锚定到工具系零位 → endFrame 零位姿态自动派生为 $U^{-1}$；
+  输入 $\Delta T_{\text{tip}} = U\cdot\Delta_{\text{tool}}\cdot U^{-1}$（默认左乘世界系增量）、
+  输出 $D(q) = U^{-1}\cdot T_{\text{rootWorld}}(q)\cdot U$，其中 $U = T_{\text{root}\leftarrow\text{tool}}$
+- **约束**：root→endFrame 位姿链须无关节（工具刚性固连，否则报 `flexibleToolFrame`）；
+  未声明 `tool_frame` 时行为与历史完全一致（$U = I_4$，`setToolTarget` ≡ `setTipTarget`）
+
+**产出**：
+
+| 文件 | 内容 |
+|------|------|
+| `specs/schema/execution-config.schema.yaml` | `tool_frame` 块 schema（`$defs/toolFrame` / `toolFrameRotation` / `scalarOrAngle`） |
+| `+ir/ExecutionConfig.m` | `ToolFrame` 属性 + 解析/角单位归一化（`"45deg"` / `"0.7854rad"`） |
+| `+solver/ClosureSolver.m` | `ToolTransform` 属性、`setToolTarget`（共轭后委托现有残差管线）、`evalToolPose`（world-rooted FK 输出换装） |
+| `tests/pipeline/test_tool_frame_m_rex_3t1r.m` | m-rex 倾斜 45° 用例：零位工具系 ≡ $I_4$、tip 姿态 $Ry(-45°)$、共轭等价、IK 端到端 + 世界 z 轴旋转正确拒绝 |
+
+**实测**（MATLAB R2026a 无头，全部全绿）：零位 $\|D(0)-I_4\|$ = 8e-15；
+`setToolTarget(D)` ≡ `setTipTarget(U·D·U⁻¹)` 精确 0；+5 mm 世界 x 平移 IK 一次收敛
+（$\|r\|$ = 6e-13，工具位姿误差 3e-11）；可达世界轴旋转 $\|r\|$ = 1e-13、L/R 分支互差 3e-12；
+世界 z 轴旋转被正确拒绝（$\|r\|$ = 8.7e-2，超出机构 3T1R 流形）。
+
+---
+
+#### A.5.2 · 求解器标准化与统一接口（含渲染分层）
+
+**目标**：把求解管线标准化为「求解器 → 位姿数据 → 渲染」的单向数据流；统一 FK/IK 高层接口，补齐边界管理、初值策略与收敛诊断。
+
+> **修订说明（2026-10-14）**：原规划仅含「统一接口 + 鲁棒性」。实际推进中发现动画层（A.5.1）
+> 与求解层职责混杂——动画内部自行构建 `Expander`、自行做世界锚定换算（共轭公式与
+> `ClosureSolver`/测试共三处重复），且「求解器产物」缺少位姿序列定义。因此本节修订为三个
+> 子阶段：**A.5.2.0 渲染分层**（先做）→ **A.5.2.1 统一接口** → **A.5.2.2 IK 轨迹消费闭环**。
+
+---
+
+##### A.5.2.0 · 位姿序列产物与渲染分层（动画重构）
+
+**目标**：定义 `PoseSequence`（位姿序列）为求解层产物；`viz.play` 成为纯渲染器；`viz.animate` 降级为兼容包装。此后「有没有动画，求解器都产出位姿数据」。
+
+**具体任务**：
+
+1. **`+solver/buildPoseSequence.m`**：$Q$（关节轨迹）→ `PoseSequence`
+   - 每帧全体 frame 位姿（`containers.Map`: frame → 4×4 double）
+   - `'Anchor'`：`'root'`（默认）/ `'world'`（世界锚定共轭 $E(q)=T_{\text{bind}}\cdot T_{g_{\text{ref}}}^{-1}(q)$；与 `ClosureSolver` 自动标定同源）
+   - 元数据：`VarNames` / `Q` / `RootFrame` / `Trail`（root 世界路径）/ `Tbind` / `BranchGapMax`
+2. **`+viz/sceneSpec.m`**：`Expander` → `SceneSpec` 静态场景快照（instances / connectionInfo / 几何缓存 / 特征尺度 L）
+3. **`+viz/play.m`**：纯播放器——只消费 `(PoseSequence, SceneSpec)`；播放控件、轨迹叠加、逐帧渲染循环（原 `animate` 渲染部分原样迁移，不再持有 `Expander`/求解逻辑）
+4. **`+viz/animate.m`**：兼容包装（外部签名不变）＝ `Expander` → `buildPoseSequence` → `sceneSpec` → `play`
+
+**产出**：
+
+| 文件 | 内容 |
+|------|------|
+| `+solver/buildPoseSequence.m` | FK 位姿序列构建器（含世界锚定） |
+| `+viz/sceneSpec.m` | 静态场景快照提取 + 几何预加载 |
+| `+viz/play.m` | 位姿序列纯播放器 |
+| `+viz/animate.m`（重构） | 兼容包装器（签名不变） |
+| `tests/pipeline/test_animation_m_rex_3t1r.m`（升级） | 分层 API 演示 + `'Anchor','tool'` 工具系世界显示（零位可见 −45° 倾角）+ 工具系 triad（`play` 的 `'ExtraFrames'`） |
+| `tests/pipeline/test_pose_sequence_m_rex_3t1r.m` | 序列契约测试：帧数 / frame 全集 / root 锚定恒等 / 世界锚定共轭公式 / Trail 一致性 / 错误行为 |
+
+**过关标准**：
+- 两个既有动画测试零改动全绿（渲染等价）
+- 序列契约测试全绿；`viz.play` 的输入仅为纯数据（`PoseSequence` + `SceneSpec`）
+
+---
+
+##### A.5.2.1 · `+solver/Solver.m`：统一 FK/IK 接口与鲁棒性
+
+**目标**：同 API 路由 FK/IK，增加边界管理、初值策略和收敛诊断。
 
 **具体任务**：
 
@@ -668,11 +746,13 @@ flowchart LR
    - 设计 `Solver.solve(mechanismName, targetPose)` 风格的高层接口
    - 内部自动路由：开环机构 → FK 直接求值，闭环机构 → fmincon SQP IK
    - 对 L2/L3 闭环使用同一套求解逻辑（`ClosureSolver` + `ExecutionConfig`）
+   - tool-frame 目标接口（`setToolTarget`/`evalToolPose`）一并纳入目标位姿类型系统
 
 2. **变量边界管理**
    - 从模块定义 YAML 中读取关节限位（`joint.limits`）和 Manipulator 行程
    - 自动翻译为 fmincon 的 `lb`/`ub` 参数
    - 支持通过 execution-config 覆盖默认边界
+   - 补上 `ClosureSolver.solveIK` 缺失的 bounds 形参（A.4b 遗留）
 
 3. **初值策略**
    - 默认：零位初值（适用于小位移 IK）
@@ -682,10 +762,7 @@ flowchart LR
 4. **收敛诊断与失败分类**
    - 将 fmincon `exitflag` 映射为可读消息
    - 输出残差分量明细（每个切口、每个分量的最终残差）
-   - 失败自动分类：
-     - 「模型不可解」— 目标位姿超出工作空间（残差大 + 所有初值均失败）
-     - 「初值不佳」— 某些初值成功、某些失败
-     - 「数值病态」— Jacobian 条件数过大、步长萎缩
+   - 失败自动分类：「模型不可解」/「初值不佳」/「数值病态」（Jacobian 条件数、步长萎缩）
 
 **产出**：
 
@@ -698,6 +775,20 @@ flowchart LR
 - 同一 API 调用可处理 open-chain-2r（FK）、single-closed-loop（IK）、m-rex-3t1r（IK）
 - 随机多起点求解成功率 ≥ 80%（对于工作空间内的目标位姿）
 - 失败时输出可操作的诊断信息（而非裸 exitflag）
+
+##### A.5.2.2 · IK 轨迹接口（求解结果消费闭环）
+
+**目标**：`solveTrajectory(D(t)) → Q + PoseFrames`——目标位姿序列逐帧 IK → 自动 FK 展开（`buildPoseSequence`）→ 位姿序列。至此「动画 = 求解结果查看器」完全成立，亦为 A.7.1 PathPlanner GUI 实时显示提供同一消费模式。
+
+**具体任务**：
+
+1. IK 轨迹循环：目标位姿序列 → 逐帧 `Solver.solveIK`（热启动：上一帧解作当前帧初值）→ $Q$ → `buildPoseSequence`
+2. 失败帧处理策略：跳过 / 保持上一帧 / 中止 + 报告
+3. 测试：目标位姿轨迹 → $Q$ + 位姿序列 → `viz.play` 回放（可并入动画测试扩展）
+
+**产出**：`+solver/Solver.m`（或 `+solver/solveTrajectory.m`）+ 测试扩展。
+
+**过关标准**：给定一条工作空间内的目标轨迹，产出位姿序列的闭环残差均 < tolerance，且可原样喂给 `viz.play`。
 
 ---
 

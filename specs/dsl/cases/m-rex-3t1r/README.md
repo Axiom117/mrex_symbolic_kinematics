@@ -65,6 +65,8 @@ flowchart TD
   标定位姿（残差取 M = I₄、far 为常量；语义见
   [`connection-semantics.md`](../../connection-semantics.md) §6.4）。
 - **标定**：`world_binding` 省略 `T`，由 `solver.ClosureSolver` 在零位构型下自动标定。
+- **工具坐标系**：默认声明 `tool_frame`（`rpy: [0, 45deg, 0]`）→ 世界系 ≡ 工具系零位
+  （pipette tip 初始倾斜 −45°）；全部用户面目标位姿以工具系表达，用法与开关见下节。
 - **历史**：A.4b 曾用 6 未知量 3T 基线配置（内部关节 known、`components: [tx, ty, tz]`）；
   A.5.1 释放内部关节后其能力被本配置覆盖，基线配置于 2026-10-11 配置合并中移除——其
   KNOWNVALUES / 方形 6×6 基线覆盖保留在测试 tmp fixture 中。
@@ -86,10 +88,12 @@ flowchart TD
 > 自由度——纯转动目标无法满足（Ry 2° 的 tip 位姿偏差 1.391）。释放内部关节移入 `unknown`
 > 后获得完整 3T1R 能力；本案例现以该表述为唯一配置。
 
-## 动画（A.5.1）
+## 动画（A.5.1 / A.5.2.0）
 
-world-anchored 动画：`viz.animate(dsl, Q, varNames, 15, 'Anchor', 'world')`（figure 中 ▶ Play 播放）。
-端到端测试与轨迹生成：`tests/pipeline/test_animation_m_rex_3t1r.m`（全绿）。
+分层播放（A.5.2.0 起，推荐）：`solver.buildPoseSequence(e, Q, names, 'Anchor', 'tool'|'world', 'ToolTransform', U)`
+→ `viz.sceneSpec(e)` → `viz.play(seq, scene, 'Fps', 15)`（figure 中 ▶ Play 播放）；兼容包装
+`viz.animate(...)` 签名不变。端到端测试与轨迹生成：`tests/pipeline/test_animation_m_rex_3t1r.m`
+（全绿；`'Anchor','tool'` 工具系世界显示 + 工具系 triad，pipette 零位可见 −45° 倾角）。
 
 **demo 轨迹的规定位置**：轨迹不在任何 `execution-config*.yaml` 里——它由测试脚本顶部参数区定义，
 经闭式构造展开成关节轨迹矩阵 `Q` 后传入动画/求解器（与 single-closed-loop 测试内联轨迹同例）：
@@ -119,6 +123,23 @@ $\mathbf{p}_{\text{swing}}$ 为单铰链偏转、Manipulator 零位时的 tip �
 > **全任务空间**执行配置（`unknown` 含两个内部关节、`components` 全 12 分量）——供求解器侧
 > 残差验证与 IK 使用；只规定 L3 执行语义，不含轨迹。
 > 原 6 未知量 3T 基线配置（A.4b）已于 2026-10-11 配置合并中移除（覆盖迁移至测试 fixture）。
+
+## 工具坐标系（A.5.1.5，本案例已声明）
+
+本案例的 `execution-config.yaml` **默认声明** `tool_frame`（`rpy: [0, 45deg, 0]`）——
+作为「工具系零位与世界系对齐 + pipette tip 初始倾斜 −45°」的参考用法：
+
+- **语义**：声明后「世界系 ≡ 工具坐标系零位姿态」。工具系零位姿态 = $I_4$（初始方向与
+  世界系平行）；pipette tip（`endFrame`）零位姿态自动派生为 $U^{-1} = Ry(-45°)$（即设计例
+  `0,0,0,0,-45°,0`），其中 $U = T_{\text{root}\leftarrow\text{tool}} =
+  T_{\text{endFrame}\leftarrow\text{tool}} = Ry(45°)$（root = endFrame = `pipette.tip_origin`）。
+- **用法**：目标位姿经 `ClosureSolver.setToolTarget(Δ)` 输入（左乘世界系增量，内部共轭
+  $\Delta T_{\text{tip}} = U\cdot\Delta\cdot U^{-1}$）；位姿报告经 `ClosureSolver.evalToolPose(q)` 输出。
+  tip 级旧接口 `setTipTarget` 不受影响（两者未声明 tool_frame 时完全一致）。
+- **开关**：删除/注释 `execution-config.yaml` 中的 `tool_frame` 块即回到历史行为
+  （世界系 ≡ tip 零位，$U = I_4$，`setToolTarget` ≡ `setTipTarget`）。
+- 语义细节见 [`connection-semantics.md`](../../connection-semantics.md) §6.5；端到端验证：
+  `tests/pipeline/test_tool_frame_m_rex_3t1r.m`（[1] 案例声明 / [2] 剥离后回归 / [7] 工具系 IK）。
 
 ## 说明
 

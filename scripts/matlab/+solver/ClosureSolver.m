@@ -21,6 +21,14 @@ classdef ClosureSolver < handle
 %   (default 0; override via the KNOWNVALUES map argument):
 %       cs = solver.ClosureSolver(e.EdgeGraph_, cfg, e.JointVarMap, knownMap);
 %
+%   Tool frame (L3, optional): when the execution config declares a
+%   tool_frame, the world is re-anchored to the tool-frame zero pose and
+%   task targets / pose reports are expressed in the tool frame:
+%       cs.setToolTarget(deltaTool)   % ΔT_tip = U · Δ_tool · U⁻¹
+%       D = cs.evalToolPose(q)        % D(q) = U⁻¹ · T_rootWorld(q) · U
+%   where U = T_root←tool (constant; requires a rigid root→endFrame chain).
+%   With no tool_frame declared, U = I₄ and setToolTarget ≡ setTipTarget.
+%
 %   Usage:
 %       e   = ir.Expander(dslYaml);
 %       cfg = ir.ExecutionConfig(execYaml, e.SymbolRegistry, e.EdgeGraph_);
@@ -36,6 +44,10 @@ classdef ClosureSolver < handle
 %       cs.setTipTarget(deltaT);
 %       [x_opt, fval] = cs.solveIK();
 %
+%       % Tool-frame targets (world ≡ tool-frame zero pose):
+%       cs.setToolTarget(deltaTool);       % world-axis increment, tool frame
+%       D = cs.evalToolPose(x_opt);        % achieved tool pose in world
+%
 %   See also: +ir/EdgeGraph, +ir/ExecutionConfig, +solver/KinematicModel
 
     % ---- public read-only properties ----
@@ -48,6 +60,7 @@ classdef ClosureSolver < handle
         NumCuts       (1,1) double          % number of closure cuts
         NumComponents (1,1) double          % total number of residual components
         TipTarget     (4,4) double = eye(4) % ΔT — tip task target for world-anchored cuts (default I₄)
+        ToolTransform (4,4) double = eye(4) % U = T_root←tool when tool_frame declared (else I₄)
     end
 
     % ---- private properties ----
@@ -94,6 +107,9 @@ classdef ClosureSolver < handle
 
             % ---- propagate symbolic poses through the edge graph ----
             obj.Poses_ = edgeGraph.propagate();
+
+            % ---- resolve tool-frame transform U = T_root←tool (constant) ----
+            obj.ToolTransform = obj.resolveToolTransform();
 
             % ---- enrich ClosureCuts (T_mate / world-binding calibration) ----
             obj.ClosureCuts = obj.enrichClosureCuts(rawCuts);
@@ -246,27 +262,64 @@ classdef ClosureSolver < handle
             obj.ResidualFunc_ = [];   % invalidate cached numeric handle
         end
 
+        %% setToolTarget  Set the task target expressed in the tool frame (L3).
+        %   obj.setToolTarget(DELTAT)
+        %     DELTAT : 4×4 double — desired tool-frame pose relative to the
+        %              tool zero pose, expressed in world axes (left-multiplied
+        %              world-frame increment; world ≡ tool-frame zero pose).
+        %   Internally maps to the tip target via the constant conjugation
+        %       ΔT_tip = U · DELTAT · U⁻¹,   U = obj.ToolTransform
+        %   and delegates to setTipTarget (world-anchored cuts only).
+        %   When no tool_frame is declared, U = I₄ and this is identical to
+        %   setTipTarget.
+        function setToolTarget(obj, deltaT)
+            arguments
+                obj
+                deltaT (4,4) double
+            end
+            U = obj.ToolTransform;
+            obj.setTipTarget(U * deltaT * core.RigidBodyMath.invT(U));
+        end
+
         %% evalResidual  Evaluate numeric residual at given joint values.
         %   r = obj.evalResidual(JOINTVALS)
         %     JOINTVALS : numeric vector (order of obj.UnknownSyms) or
         %                 containers.Map (canonical name → numeric value)
         function r = evalResidual(obj, jointVals)
-            if isa(jointVals, 'containers.Map')
-                vals = zeros(numel(obj.UnknownSyms), 1);
-                for i = 1:numel(obj.UnknownNames)
-                    if isKey(jointVals, obj.UnknownNames{i})
-                        vals(i) = jointVals(obj.UnknownNames{i});
-                    end
-                end
-            else
-                vals = jointVals;
-            end
-            assert(numel(vals) == numel(obj.UnknownSyms), ...
-                'solver:ClosureSolver:valCount', ...
-                'Expected %d joint values, got %d.', ...
-                numel(obj.UnknownSyms), numel(vals));
+            vals = obj.resolveJointVals_(jointVals);
             fh = obj.toNumericFunction();
-            r = fh(vals(:));
+            r = fh(vals);
+        end
+
+        %% evalToolPose  Tool-frame pose in the world at given joint values.
+        %   D = obj.evalToolPose(JOINTVALS)
+        %     JOINTVALS : numeric vector (order of obj.UnknownSyms) or
+        %                 containers.Map (canonical name → numeric value).
+        %     D         : 4×4 double — tool-frame pose in the world,
+        %                 D(q) = U⁻¹ · T_rootWorld(q) · U.
+        %   The FK root pose in the world is recovered from the first
+        %   world-anchored cut (world-rooted FK):
+        %       T_rootWorld(q) = T_bind_i · inv(T_near_i(q))
+        %   All cuts agree when the closure residual is ≈ 0.  Requires at
+        %   least one world-anchored cut (L3).
+        function D = evalToolPose(obj, jointVals)
+            vals = obj.resolveJointVals_(jointVals);
+
+            wIdx = find(strcmp({obj.ClosureCuts.anchor}, 'world'), 1);
+            assert(~isempty(wIdx), ...
+                'solver:ClosureSolver:evalToolPoseNoWorldCuts', ...
+                'evalToolPose requires at least one world-anchored cut (L3).');
+
+            T_near = obj.Poses_(obj.ClosureCuts(wIdx).near);   % 4×4 sym (knowns substituted)
+            if isa(T_near, 'sym')
+                T_near_num = double(subs(T_near, obj.UnknownSyms, vals.'));
+            else
+                T_near_num = double(T_near);
+            end
+            T_root_world = obj.ClosureCuts(wIdx).T_bind * core.RigidBodyMath.invT(T_near_num);
+
+            U = obj.ToolTransform;   % U = T_root←tool
+            D = core.RigidBodyMath.invT(U) * T_root_world * U;
         end
 
         %% solveIK  Solve IK via fmincon minimizing squared residual norm.
@@ -441,6 +494,60 @@ classdef ClosureSolver < handle
 
     % ---- private methods ----
     methods (Access = private)
+
+        %% resolveJointVals_  Normalize joint values to a numeric column vector.
+        %   Accepts a numeric vector or a containers.Map (canonical name → value).
+        function vals = resolveJointVals_(obj, jointVals)
+            if isa(jointVals, 'containers.Map')
+                vals = zeros(numel(obj.UnknownSyms), 1);
+                for i = 1:numel(obj.UnknownNames)
+                    if isKey(jointVals, obj.UnknownNames{i})
+                        vals(i) = jointVals(obj.UnknownNames{i});
+                    end
+                end
+            else
+                vals = jointVals;
+            end
+            assert(numel(vals) == numel(obj.UnknownSyms), ...
+                'solver:ClosureSolver:valCount', ...
+                'Expected %d joint values, got %d.', ...
+                numel(obj.UnknownSyms), numel(vals));
+            vals = vals(:);
+        end
+
+        %% resolveToolTransform  U = T_root←tool when cfg declares tool_frame.
+        %   U = T_root←endFrame · T_endFrame←tool.  Requires a joint-free
+        %   (rigid) root→endFrame chain so that U is configuration-independent;
+        %   otherwise the world≡tool-frame-zero mapping breaks and an error
+        %   is raised.
+        function U = resolveToolTransform(obj)
+            U = eye(4);
+            tf = obj.ExecConfig_.ToolFrame;
+            if ~tf.Present
+                return;
+            end
+
+            endFrame = obj.ExecConfig_.EndFrame;
+            assert(isKey(obj.Poses_, endFrame), ...
+                'solver:ClosureSolver:endFrameNotFound', ...
+                'End frame "%s" not found in propagated poses.', endFrame);
+            T_re = obj.Poses_(endFrame);
+
+            if isa(T_re, 'sym')
+                vars = symvar(T_re);
+                assert(isempty(vars), ...
+                    'solver:ClosureSolver:flexibleToolFrame', ...
+                    ['tool_frame requires a joint-free (rigid) chain from ' ...
+                     'the FK root to endFrame "%s"; found variable(s): %s. ' ...
+                     'The world≡tool-frame-zero mapping only holds for a ' ...
+                     'constant tool attachment.'], ...
+                    endFrame, strjoin(cellfun(@char, num2cell(vars), ...
+                    'UniformOutput', false), ', '));
+                T_re = double(T_re);
+            end
+
+            U = T_re * tf.T;
+        end
 
         %% enrichClosureCuts  Resolve mate transforms / world-binding calibrations.
         function cuts = enrichClosureCuts(obj, rawCuts)

@@ -14,9 +14,12 @@
 | `+ir/` | [ExecutionConfig](#executionconfig) | value 类 | L3 执行配置与变量分区 |
 | `+solver/` | [KinematicModel](#kinematicmodel) | handle 类 | 符号 FK 薄封装 + 问题构造 |
 | `+solver/` | [ClosureSolver](#closuresolver) | handle 类 | 闭环残差构造 + fmincon 求解 |
+| `+solver/` | [buildPoseSequence](#buildposesequence) | 函数 | FK 位姿序列构建（Q → PoseFrames） |
 | `+viz/` | [mechanism](#mechanism) | 函数 | 机构装配与可视化 |
 | `+viz/` | [module](#module) | 函数 | 单模块可视化校验 |
-| `+viz/` | [animate](#animate) | 函数 | 关节轨迹动画（world 锚定 + tip 轨迹） |
+| `+viz/` | [animate](#animate) | 函数 | 轨迹动画兼容包装（buildPoseSequence + play） |
+| `+viz/` | [play](#play) | 函数 | 位姿序列纯播放器（渲染层） |
+| `+viz/` | [sceneSpec](#scenespec) | 函数 | 静态场景快照提取 |
 | `+viz/` | [allModules](#allmodules) | 函数 | 批量模块校验 |
 
 ---
@@ -175,6 +178,7 @@ cfg = ir.ExecutionConfig('exec-config.yaml', e.SymbolRegistry, e.EdgeGraph_);
 | `ActuatedJoints` | `cell array` | 驱动关节 ref 列表；closed_loop 下为空 |
 | `ClosureCuts` | `struct array` | 字段: `near`, `far`, `components`；open_loop 下为空 |
 | `ClosureSource` | `char` | `'explicit'`（YAML 声明）、`'auto'`（从 closed_mate 推导）或 `''`（open_loop） |
+| `ToolFrame` | `struct` | 字段: `Present`（logical，YAML 是否声明 `tool_frame`）, `T`（4×4 double = T_endFrame←tool；角已归一化为 rad）。缺省 `Present=false`、`T=eye(4)` |
 | `Tolerances` | `struct` | 字段: `translation_mm`, `rotation_rad`（默认均为 0.001） |
 | `ConfigPath` | `char` | 配置文件绝对路径 |
 
@@ -196,6 +200,11 @@ cfg = ir.ExecutionConfig('exec-config.yaml', e.SymbolRegistry, e.EdgeGraph_);
    - `closed_loop`: 禁止 `actuated_joints`；`closure_cuts` 可显式声明或自动推导
 3. **Registry 交叉校验**: 所有 ref 必须在 `SymbolRegistry` 中存在；joint 变量必须完整覆盖（不重不漏）
 4. **closure_cuts 自动推导**: 若 YAML 未声明，从 `EdgeGraph.findMates()` 中提取 `kind='closed_mate'` 的边
+5. **tool_frame 解析（可选）**: `tool_frame.transform` → `T_endFrame←tool`（4×4 double）。
+   旋转支持 `align` / `rpy` / `axis_angle`（与模块定义同构）；角分量数值 = rad，
+   或带显式单位的字符串（`"45deg"` / `"0.7854rad"`）。缺 `transform` 时报
+   `ir:ExecutionConfig:invalidToolFrame`。语义（世界系重锚定）见
+   `specs/dsl/connection-semantics.md` §6.5
 
 #### 设计要点
 
@@ -295,6 +304,7 @@ prob = km.formulatePoseProblem(cfg);         % FK 或 IK 问题
 | `NumCuts` | `double` | 闭环切割数 |
 | `NumComponents` | `double` | 残差总维度 |
 | `TipTarget` | `4×4 double` | ΔT——world 锚定切口的 tip 任务目标（默认 `eye(4)`，见 `setTipTarget`） |
+| `ToolTransform` | `4×4 double` | U = T_root←tool（声明 `tool_frame` 时为 `T_root←endFrame·T_endFrame←tool`，否则 `I₄`） |
 
 #### Public Methods
 
@@ -306,6 +316,8 @@ prob = km.formulatePoseProblem(cfg);         % FK 或 IK 问题
 | `toNumericFunction` | `() → function_handle` | 将符号残差转为 `@(x)` 数值函数句柄（缓存） |
 | `verifyZeroPose` | `()` | 零位姿验证：断言 `‖residual‖ < 1e-12` |
 | `setTipTarget` | `(deltaT) → void` | 设置 tip 任务目标 ΔT 并重建符号残差（仅作用于 world 锚定切口） |
+| `setToolTarget` | `(deltaT) → void` | 设置**工具坐标系**任务目标（世界系左乘增量）；内部共轭 `ΔT_tip = U·Δ_tool·U⁻¹` 后委托 `setTipTarget`（未声明 tool_frame 时与 `setTipTarget` 完全一致） |
+| `evalToolPose` | `(jointVals) → 4×4 double` | 给定关节值求工具坐标系位姿 `D(q) = U⁻¹·T_rootWorld(q)·U`（world-rooted FK，需 world 锚定切口） |
 | `evalResidual` | `(jointVals) → vector` | 在给定关节值处求数值残差 |
 | `solveIK` | `(x0?, options?) → [x_opt, fval, exitflag]` | 通过 `fmincon` SQP 最小化 `‖residual‖²` 求解 IK（options 可为 fmincon options 对象或 struct） |
 | `solveIKWithTarget` | `(targetPose, endFrame, x0?, options?) → [x_opt, fval, exitflag, report]` | 组合残差 = 闭环残差 + 末端位姿误差，联合求解 |
@@ -339,6 +351,7 @@ T_err = T_near(q) \ (ΔT⁻¹ · T_bind)  % 应为 I 当闭环
 - **零位姿验证**: 构造函数后应调用 `verifyZeroPose()` 确认符号推导无误。
 - **组合求解**: `solveIKWithTarget` 将闭环约束 + 末端位姿目标同时优化，适用于同时满足闭环精度和 task-space 目标的场景。
 - **L3 world 锚定切口**: `anchor: world` 的 cut 将 ground frame 锚定到 `world_binding` 标定位姿；`setTipTarget(ΔT)` 把 tip 任务目标注入常量侧（ΔT = 相对零位标定的位移），用于 3T/R 任务求解。
+- **工具坐标系（tool_frame）**: 声明后“世界系 ≡ 工具坐标系零位姿态”，用户面目标位姿经 `setToolTarget` 共轭到 tip 侧、位姿报告经 `evalToolPose` 共轭回工具系；要求 root→endFrame 链无关节（否则报 `flexibleToolFrame`）。详见 `specs/dsl/connection-semantics.md` §6.5。
 - **known 关节代换**: 构造时把 known 关节值（默认 0）`subs` 进全部符号位姿，残差只含 unknown 变量（构造末尾有守卫断言）。
 
 #### 使用示例
@@ -355,11 +368,56 @@ csL3 = solver.ClosureSolver(e.EdgeGraph_, cfg, e.JointVarMap, ...
 D = eye(4); D(1,4) = 10;                          % tip 沿 +X 平移 10 mm
 csL3.setTipTarget(D);
 [x_opt, fval] = csL3.solveIK();
+
+% 工具坐标系目标（execution-config 声明 tool_frame 时）：世界系左乘增量
+csL3.setToolTarget(D);                            % ΔT_tip = U · D · U⁻¹
+[x_opt, fval] = csL3.solveIK();
+Dach = csL3.evalToolPose(x_opt);                  % 工具系实际位姿（≈ D）
 ```
 
 #### See Also
 
 `+ir/EdgeGraph`, `+ir/ExecutionConfig`, `+solver/KinematicModel`
+
+---
+
+### buildPoseSequence
+
+**类型**: 函数  
+**文件**: `+solver/buildPoseSequence.m`  
+**签名**: `seq = solver.buildPoseSequence(expander, Q, varNames, Name, Value...)`  
+**职责**: FK 位姿序列构建器（A.5.2.0）——把关节轨迹 $Q$ 展开为逐帧全体 frame 位姿（`PoseSequence`）；「求解器 → 位姿数据 → 渲染」数据流中的计算层产物，渲染层（`viz.play`）只消费该数据、不做运动学计算。
+
+#### 名称-值选项
+
+| 选项 | 取值 | 说明 |
+|------|------|------|
+| `'Anchor'` | `'root'`（默认）/ `'world'` / `'tool'` | `'world'` 经 $E(q)=T_{\text{bind}}\cdot T_{g}^{-1}(q)$ 重新表达在内部世界系（ground 静止于标定值；要求 `semantic_tag: ground`）；`'tool'` 在其上再左乘 $U^{-1}$——世界 ≡ 工具系零位姿态（工具系零位 = $I_4$、tip 可见 $U^{-1}$ 倾角，与 L3 `tool_frame` 语义一致） |
+| `'ToolTransform'` | `4×4 double` | $U = T_{\text{root}\leftarrow\text{tool}}$（如 `ClosureSolver.ToolTransform`）；`'Anchor','tool'` 必填 |
+| `'Frames'` | cell | 纳入序列的 frame 子集（默认全部；FK root 恒含，作为 Trail 来源） |
+
+#### 返回值字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `Frames` | `1×nFrames cell` | 每帧 `containers.Map`（frame → 4×4 double） |
+| `FrameNames` / `RootFrame` / `Anchor` / `VarNames` / `Q` / `MechName` | — | 元数据 |
+| `Trail` | `3×nFrames` | root（tip）世界路径（`'root'` 模式为零阵） |
+| `Tbind` / `GroundFrames` / `BranchGapMax` | — | `'world'` / `'tool'` 模式的绑定、ground 列表与分支一致性诊断（`'tool'` 下 Tbind 为显示坐标 $U^{-1}T_{\text{bind}}$） |
+| `ToolTransform` | `4×4 double` | 传入的 $U$（`'tool'` 模式；否则为 `[]`） |
+
+#### 使用示例
+
+```matlab
+e = ir.Expander(dslFile);  e.compilePoseFunctions();
+seq = solver.buildPoseSequence(e, Q, varNames, 'Anchor', 'world');
+scene = viz.sceneSpec(e);
+viz.play(seq, scene, 'Fps', 15);
+```
+
+#### See Also
+
+`viz.play`, `viz.animate`, `+ir/Expander.evaluateNumericDirect`
 
 ---
 
@@ -461,12 +519,57 @@ disp(r.frames.linkB);  % 4×4 double 位姿
 
 ---
 
+### play
+
+**类型**: 函数  
+**文件**: `+viz/play.m`  
+**签名**: `viz.play(poseSeq, scene, Name, Value...)`  
+**职责**: 位姿序列纯播放器（A.5.2.0）。只消费 `(PoseSequence, SceneSpec)` 纯数据——**不做任何运动学计算**；逐帧读取 `poseSeq.Frames` 渲染机构几何，world 模式下叠加 `poseSeq.Trail` 轨迹与静态 ground 标记。
+
+#### 名称-值选项
+
+| 选项 | 取值 | 说明 |
+|------|------|------|
+| `'Fps'` | `double`（默认 10） | 播放速度 |
+| `'ShowTrail'` | `logical`（默认 `true`） | tip 轨迹叠加（`'world'` / `'tool'` 序列生效） |
+| `'ExtraFrames'` | struct array `{Label, Base, T}` | 逐帧挂载绘制的虚拟坐标系：位姿 = `pose(Base)·T`（如把 L3 工具系 triad 挂到 FK root 上；`'tool'` 世界里与世界轴重合） |
+
+#### 播放控件
+
+与 `viz.animate` 相同（▶ Play / ⏮ Reset / Speed / Frame）。
+
+#### See Also
+
+`solver.buildPoseSequence`, `viz.sceneSpec`, `viz.animate`
+
+---
+
+### sceneSpec
+
+**类型**: 函数  
+**文件**: `+viz/sceneSpec.m`  
+**签名**: `scene = viz.sceneSpec(expander)`  
+**职责**: 从 `Expander` 提取配置无关的静态场景快照，供 `viz.play` 渲染使用。
+
+#### 返回值字段
+
+| 字段 | 说明 |
+|------|------|
+| `MechName` / `Instances` / `ConnectionInfo` / `LibDir` / `RepoRoot` / `NInst` / `NConns` / `L` | 静态场景数据（含特征尺度） |
+| `GeomCache` | `containers.Map`：几何路径 → 预加载几何（避免逐帧磁盘 IO） |
+
+#### See Also
+
+`viz.play`, `viz.animate`, `+ir/Expander`
+
+---
+
 ### animate
 
 **类型**: 函数  
 **文件**: `+viz/animate.m`  
 **签名**: `viz.animate(dslYaml, jointTrajectory, varNames, fps?, Name, Value...)`  
-**职责**: 通过关节轨迹序列动画展示机构运动。构建一次 `Expander`，预编译位姿函数，逐帧代入数值渲染；可选 world 锚定渲染（L3 世界系闭环）与 tip 世界轨迹叠加。
+**职责**: 轨迹动画**兼容包装**（A.5.2.0 起）——内部 ＝ `ir.Expander` → `solver.buildPoseSequence` → `viz.sceneSpec` → `viz.play`；外部签名与选项保持不变。分层 API 见 `viz.play` / `solver.buildPoseSequence`。
 
 #### 播放控件
 
@@ -484,11 +587,11 @@ disp(r.frames.linkB);  % 4×4 double 位姿
 | `'Anchor'` | `'root'`（默认）或 `'world'` | 显示参照系。`'world'` 把 tool-rooted FK 位姿经 $E(q)=T_{\text{bind}}\cdot T_{\text{tip}\leftarrow g_{\text{ref}}}^{-1}(q)$ 共轭到世界系，使 L3 世界系闭环机构（如 m-rex-3t1r）的两台 Manipulator ground frame 静止于标定位姿、工具端真实移动。要求机构存在 `semantic_tag: 'ground'` 的 frame；$T_{\text{bind}}$ 取零位 FK（与 `solver.ClosureSolver` 自动标定一致）；多余 ground frame 打印分支一致性诊断 |
 | `'ShowTrail'` | `logical`，默认 `true` | 叠加 tip 世界轨迹：完整路径淡虚线 + 已走过段高亮 + 当前 tip 标记（仅 `'world'` 模式生效） |
 
-#### 性能优化
+#### 性能优化（位于计算层与渲染层）
 
 1. **预编译**: `expander.compilePoseFunctions()` 将符号位姿转为 `matlabFunction` 句柄（一次性，~秒级）
-2. **按需评估**: 仅评估 body + joint frame（非全部 frame），`evaluateNumericDirect` 利用预编译句柄达到亚毫秒/帧
-3. **几何预加载**: 导入一次 STEP 几何 → `geomCache`，避免逐帧磁盘 IO
+2. **序列预计算**: 位姿在播放前一次性算好（`PoseSequence`），渲染循环无运动学开销
+3. **几何预加载**: `viz.sceneSpec` 导入一次 STEP 几何 → `geomCache`，避免逐帧磁盘 IO
 
 #### 输入
 
@@ -517,7 +620,7 @@ viz.animate(dslFile, Q, varNames, 15, 'Anchor', 'world');
 
 #### See Also
 
-`+viz/mechanism`, `+ir/Expander.evaluateNumericDirect`, `+ir/Expander.compilePoseFunctions`
+`solver.buildPoseSequence`, `viz.play`, `viz.sceneSpec`, `+ir/Expander`
 
 ---
 
