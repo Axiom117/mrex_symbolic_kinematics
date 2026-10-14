@@ -463,7 +463,11 @@ classdef Expander < handle
                 symName = [pre j.variable];
                 % ensure the symbolic variable name is valid for MATLAB (e.g. replace '.' with '_')
                 validName = matlab.lang.makeValidName(symName);
-                val = sym(validName);
+                % joint variables are real by definition (angles / displacements);
+                % the 'real' assumption keeps symbolic expansions conjugate-free
+                % (RigidBodyMath.invT uses ctranspose R', which would otherwise
+                % sprinkle conj() of the joint symbols into every pose)
+                val = sym(validName, 'real');
                 % register in JointVarMap for forward lookup from canonical name
                 obj.JointVarMap(symName) = val;
                 obj.EdgeGraph_.addJoint([pre j.from_frame], [pre j.to_frame], ax, val, kind);

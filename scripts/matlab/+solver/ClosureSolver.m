@@ -8,11 +8,15 @@ classdef ClosureSolver < handle
 %     Frame-pair cuts (L2): the mate transform M (Rz(roll*2π/sym)*Rx(π))
 %     encodes the physical connection.  At closure, T_far should equal
 %     T_near * M.  The residual is defined as:
-%         T_res = (T_near * M) \ T_far   →   should be I at closure.
+%         T_res = inv(T_near * M) * T_far   →   should be I at closure.
 %     World-anchored cuts (L3, e.g. M-REx): T_mate = I₄ and the far side is
 %     the constant calibrated binding.  At closure, T_near should equal
 %     ΔT⁻¹ · T_bind (ΔT = tip task target, default I₄):
-%         T_res = T_near \ (ΔT⁻¹ · T_bind)   →   should be I at closure.
+%         T_res = inv(T_near) * (ΔT⁻¹ · T_bind)   →   should be I at closure.
+%     Both inverses use the closed-form SE(3) inverse (core.RigidBodyMath.invT):
+%     division-free and dramatically smaller expansions than a literal `\`
+%     matrix inverse, whose ~1e+170 coefficients overflow to Inf/NaN when the
+%     numeric kernels are evaluated in double precision (A.5.4 export).
 %     Both residuals are decomposed into a 6×1 pose error vector
 %     [tx,ty,tz,rx,ry,rz] (Z-Y-X Euler angles for rotation).
 %
@@ -39,6 +43,9 @@ classdef ClosureSolver < handle
 %
 %       % Evaluate at specific joint values:
 %       r = cs.evalResidual([q_AB; q_BD; q_CD; q_AC]);
+%
+%       % Symbolic (known-substituted) frame pose — for model export:
+%       T_sym = cs.poseSym('manipulator_L.ground');
 %
 %       % L3 world-anchored IK: move the tip by ΔT, then solve:
 %       cs.setTipTarget(deltaT);
@@ -170,7 +177,11 @@ classdef ClosureSolver < handle
                     'World-anchored cut %d: T_bind not resolved.', cutIndex);
                 T_near = obj.Poses_(cut.near);              % 4×4 sym
                 T_far  = sym(obj.TipTarget \ cut.T_bind);   % constant target
-                T_err  = T_near \ T_far;                    % I at closure
+                % Closed-form SE(3) inverse: T_err = inv(T_near) * T_far.
+                % A literal `\` inverse expands via determinants (Cramer) into
+                % ~1e+170-coefficient rational trees; squaring those in the
+                % generated double-precision kernels overflows to Inf → NaN.
+                T_err  = core.RigidBodyMath.invT(T_near) * T_far;   % I at closure
             else
                 % --- frame-pair cut (L2, existing behavior) ---
                 assert(isKey(obj.Poses_, cut.far), ...
@@ -182,9 +193,10 @@ classdef ClosureSolver < handle
                 M      = cut.T_mate;            % 4×4 double — mate transform (near→far)
 
                 % At closure: T_far = T_near * M
-                % Residual in far frame: (T_near * M) \ T_far → I at closure
+                % Residual in far frame: inv(T_near * M) * T_far → I at closure
+                % (closed-form SE(3) inverse — division-free expansion)
                 T_expected = T_near * M;
-                T_err = T_expected \ T_far;  % 4×4 sym
+                T_err = core.RigidBodyMath.invT(T_expected) * T_far;  % 4×4 sym
             end
 
             % decompose to 6-DOF pose error
@@ -210,6 +222,27 @@ classdef ClosureSolver < handle
                 resPieces{i} = obj.buildResidualForCut(i);
             end
             res = vertcat(resPieces{:});
+        end
+
+        %% poseSym  Symbolic frame pose with known values already substituted.
+        %   T = obj.poseSym(FRAMENAME)
+        %     FRAMENAME : char — fully-qualified frame name present in the
+        %                 propagated pose graph (e.g. 'manipulator_L.ground').
+        %     T         : 4×4 sym (double for constant poses) — the same FK
+        %                 pose the residual is built from: known joint values
+        %                 are substituted, unknown joint variables remain
+        %                 symbolic.
+        %   Exposed for downstream consumers that compile or analyse the
+        %   symbolic model (e.g. solver.exportKinematics model packages).
+        function T = poseSym(obj, frameName)
+            arguments
+                obj
+                frameName (1,:) char
+            end
+            assert(isKey(obj.Poses_, frameName), ...
+                'solver:ClosureSolver:frameNotFound', ...
+                'Frame "%s" not found in propagated poses.', frameName);
+            T = obj.Poses_(frameName);
         end
 
         %% toNumericFunction  Convert symbolic residual to fmincon-ready handle.

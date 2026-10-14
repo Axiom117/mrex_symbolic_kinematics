@@ -828,6 +828,30 @@ flowchart LR
 - `m-rex-3t1r` 的 DOF = 4（3T1R），冗余约束被正确检测
 - `open-chain-2r` 的 DOF = 2（两转动关节串联），Jacobian 满秩
 
+---
+
+#### A.5.4 · 模型导出（自包含模型包）与运行引擎
+
+> **状态（2026-10-14）**：🔄 导出器 v0 已落地（E1）；运行引擎（E2）与消费端集成（E3）为规划。
+
+**目标**：把「符号工厂（编译器） → 自包含模型包 → 运行引擎（消费端）」拆成三段清晰边界（规划与产物规范见 `scripts/matlab/MODEL_EXPORT.md`）。导出器把 DSL 案例一键编译为**就地模型包**（`specs/dsl/cases/<case>/generated/`）：残差 / 解析雅可比 / 任务系 FK / 全体 frame FK 的独立数值 `.m` 内核 + `kinematic_metadata.json` 契约 + README；内核仅依赖 base MATLAB（无需 Symbolic Toolbox / 不依赖本仓库）。
+
+**E1 实测（m-rex-3t1r / single-closed-loop / open-chain-2r，MATLAB R2026a 无头）**：
+
+- 导出耗时随符号展开规模变化（m-rex-3t1r ~2.8 s、open-chain-2r ~1.6 s、single-closed-loop ~23 s）；生成内核与 `ClosureSolver` / `Expander` 数值一致（偏差 ≤ 8e-15，m-rex 共 96 frames / 8 输入 / 12 残差分量）；
+- 导出暴露并修复两个符号展开根因：关节符号 `real` 假设（`Expander`）、切口残差闭式 SE(3) 逆（`ClosureSolver`，替代 `T_near \ T_far` 的行列式展开）——解析雅可比由 4 个 NaN 变为全有限，残差内核提速 ~8.6×（507 → 59 µs）；
+- 既有 9 个 pipeline 测试零回归 + 新增 3 个导出测试（`tests/pipeline/test_export_kinematics_*.m`）全绿。
+
+**产出**：
+
+| 文件 | 内容 |
+|------|------|
+| `scripts/matlab/+solver/exportKinematics.m` | 模型导出器入口（`closed_loop` / `open_loop` 两模式） |
+| `specs/dsl/cases/<case>/generated/*` | 就地模型包（gitignored 生成物） |
+| `tests/pipeline/test_export_kinematics_{m_rex_3t1r,single_closed_loop,open_chain_2r}.m` | 三案例导出契约测试 |
+
+**后续（详见 ARCHITECTURE.md E2–E4）**：最小运行引擎（GN/LM + warm-start）、PathPlanner / Generative 消费端集成、C-MEX 与 JSON 计算图介质扩展。
+
 ### 阶段 A.6 · 测试顺序与验证样例
 
 目标：按风险从低到高排列验证路线，避免一开始就用并联闭环把问题混在一起。

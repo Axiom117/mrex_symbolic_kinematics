@@ -32,3 +32,6 @@ Thumbs.db
 # Generated artifacts
 generated/**
 !generated/README.md
+
+# Per-case exported model packages (solver.exportKinematics)
+specs/dsl/cases/*/generated/

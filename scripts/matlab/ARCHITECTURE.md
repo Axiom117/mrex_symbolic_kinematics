@@ -177,21 +177,115 @@ flowchart TD
     E --> F["渲染 triad / geometry"]
 ```
 
-### 符号→求解路径
+## 运动学生成核心管线：从 DSL 到 IK/FK 算子
+
+本节详细阐述一份机构描述 DSL 是如何被编译为中间表示（IR），并最终由 `ClosureSolver` 与 `KinematicModel` 编译为可计算的 FK/IK 函数的全过程。
+
+### 1. 核心流程演进（四阶段生命周期）
 
 ```mermaid
-flowchart LR
-    A["Expander"] -->|"SymbolRegistry"| B["ExecutionConfig"]
-    A -->|"EdgeGraph_"| C["KinematicModel"]
-    A -->|"EdgeGraph_ + JointVarMap"| D["ClosureSolver"]
-    B --> C
-    B --> D
-    C -->|"FK: eval(vals) → 4×4 pose"| E["数值结果"]
-    C -->|"IK: formulatePoseProblem → residual"| F["fmincon / fsolve"]
-    D -->|"buildFullResidual → fmincon SQP"| F
+flowchart TD
+    subgraph S1["阶段 1：拓扑解析与符号展开 (ir.Expander)"]
+        D["DSL 构型文件"] & M["模块定义库 (specs/modules)"] --> EXP["ir.Expander"]
+        EXP -->|"localExpandInstance"| REG["注册符号变量到 SymbolRegistry"]
+        EXP -->|"localProcessConnections"| EG["构建 ir.EdgeGraph 生成树"]
+        EG -->|"core.PosePropagator.propagatePoses"| P_SYM["生成全体 Frame 的 4×4 符号位姿 (Expander.Poses)"]
+    end
+
+    subgraph S2["阶段 2：执行配置解析 (ir.ExecutionConfig)"]
+        CFG_YAML["execution-config.yaml"] --> EC["ir.ExecutionConfig"]
+        EC -->|"校验与变量分区"| VARS["划分 known / unknown 关节变量"]
+        EC -->|"闭环切口提取"| CUTS["ClosureCuts (L2 端口对接 / L3 世界系绑定)"]
+    end
+
+    subgraph S3["阶段 3：闭环残差构建与数值编译 (solver.ClosureSolver)"]
+        P_SYM & VARS & CUTS --> CS["solver.ClosureSolver"]
+        CS -->|"substituteKnownValues"| SUB["代入已知关节数值 (减少自由未知量)"]
+        CS -->|"enrichClosureCuts"| CALIB["零位自动标定世界绑定 T_bind"]
+        CS -->|"buildFullResidual"| RES_SYM["生成 6-DOF 符号残差向量 ResidualSym"]
+        RES_SYM -->|"matlabFunction"| FH["编译为高性能数值函数句柄 ResidualFunc_"]
+    end
+
+    subgraph S4["阶段 4：运动学求解与消费"]
+        FH -->|"fmincon (SQP)"| IK_RES["solveIK(): 最小化 ||r(x)||^2 得到未知关节值"]
+        P_SYM -->|"subs / compilePoseFunctions"| FK_RES["evalToolPose() / eval(): 输入关节值直出末端位姿"]
+    end
 ```
 
-> **求解方向切换**：同一套机构 + 同一套 `KinematicModel`，仅通过更换 execution-config YAML 即可在 FK（open_loop）和 IK（closed_loop）之间切换。`formulatePoseProblem` 根据 known/unknown 分区自动构造对应的数值函数。
+### 2. 核心函数与方法详解
+
+#### 阶段 1：拓扑解析与符号展开 (`ir.Expander` + `core.PosePropagator`)
+- **入口**：`e = ir.Expander(dslYaml)`，位于 [scripts/matlab/+ir/Expander.m](scripts/matlab/+ir/Expander.m)。
+- **方法 `localExpandInstance`**：加载各模块原型（如 `Joint.yaml`、`Manipulator.yaml`），为每个活动关节实例化独立的符号变量（如 `sym('manipulator_L_dx', 'real')`），并写入 `SymbolRegistry` 与 `JointVarMap`。
+- **方法 `localProcessConnections`**：解析模块端口对接。对于闭环机构，生成树算法将主干保留为双向连通边（`addMateBidirectional`），而将闭合回路处标记为单向弦边（`addMateUnidirectional`，类型为 `closed_mate`）。
+- **方法 `core.PosePropagator.propagatePoses`**：无状态纯数学 FK 引擎。从基座根坐标系（$I_4$）出发，沿生成树递归累乘局部刚体变换与符号关节变换：
+  $$T_{child} = T_{parent} \cdot T_{offset} \cdot T_{joint}(q)$$
+  输出所有 Frame 相对世界原点的 $4 \times 4$ 符号齐次变换矩阵字典 `Expander.Poses`。
+
+#### 阶段 2：执行配置与变量分区 (`ir.ExecutionConfig`)
+- **入口**：`cfg = ir.ExecutionConfig(execYaml, e.SymbolRegistry, e.EdgeGraph_)`，位于 [scripts/matlab/+ir/ExecutionConfig.m](scripts/matlab/+ir/ExecutionConfig.m)。
+- **变量分区**：将机构中所有关节变量划分为 `known`（已知输入量，如主动驱动器的指定行程）和 `unknown`（未知待求量，如被动铰链角度或待反解的驱动轴）。
+- **切口规范**：指定闭环缝合位置。支持两种切口：
+  - **L2 机构**：双 Frame 对接切口（`near` 端口与 `far` 端口通过配合变换 $M$ 吻合）。
+  - **L3 机构**（如 M-REx 3T1R）：世界系闭环切口（`anchor: world`，末端各支链与地面基座绑定）。
+- **求解方向切换**：同一套机构仅通过更换 `execution-config.yaml` 即可在正运动学（`open_loop`，全部为 known）和逆运动学（`closed_loop`）之间切换。
+
+#### 阶段 3：闭环残差构建与编译 (`solver.ClosureSolver`)
+- **入口**：`cs = solver.ClosureSolver(e.EdgeGraph_, cfg, e.JointVarMap, knownValues)`，位于 [scripts/matlab/+solver/ClosureSolver.m](scripts/matlab/+solver/ClosureSolver.m)。
+- **已知量代换 (`substituteKnownValues`)**：把已知关节数值代入所有符号位姿，消除已知变量，降低残差公式的求解维度。
+- **零位标定 (`enrichClosureCuts`)**：在零位状态下求值，自动标定并固化世界系支链锚定矩阵 $T_{bind}$。
+- **符号残差构造 (`buildFullResidual` / `buildResidualForCut`)**：
+  - 切口两端在闭合时应满足重合关系。对于世界系切口，要求 $T_{near} = \Delta T^{-1} \cdot T_{bind}$，其相对误差矩阵为：
+    $$T_{err} = T_{near}^{-1} \cdot (\Delta T^{-1} \cdot T_{bind})$$
+  - 调用 `localSymbolicPoseErrorFromRelative` 将 $4 \times 4$ 矩阵 $T_{err}$ 解构为 6-DOF 误差分量：
+    $$r(q) = \begin{bmatrix} t_x & t_y & t_z & r_x & r_y & r_z \end{bmatrix}^T$$
+    其中平移取误差位置向量，旋转取 Z-Y-X 欧拉角（采用数值极其稳定的 $\arcsin(-R_{31})$ 计算）。
+- **数值编译 (`toNumericFunction`)**：
+  - 调用 MATLAB 符号编译器核心指令：
+    ```matlab
+    fh = matlabFunction(obj.ResidualSym, 'Vars', {obj.UnknownSyms.'});
+    ```
+  - **关键质变**：将沉重的符号代数树编译为轻量高效的纯数值函数句柄 `@(x)`，接收纯 `double` 向量，在微秒内算出残差数值。
+
+#### 阶段 4：求解与求值
+- **逆运动学求解 (`solveIK` / `solveIKWithTarget`)**：
+  - 设定任务目标（支持 `setTipTarget` 或经过工具系共轭变换的 `setToolTarget`）。
+  - 将残差平方和构造成最小二乘目标函数 $\min_x \|r(x)\|^2$。
+  - 交由 `fmincon`（SQP 算法，配合中心差分 `central` 步长），从初始猜想值在毫秒级内收敛至机器精度（$\|r\| < 10^{-12}$）。
+- **正运动学评估 (`evalToolPose` / `compilePoseFunctions`)**：
+  - 已知关节数值 $q$ 时，直接由闭环切口位姿共轭推导工具系位姿 $D(q) = U^{-1} \cdot T_{rootWorld}(q) \cdot U$；
+  - 或者调用 `Expander.compilePoseFunctions()` 预编译所有构件的独立位姿函数，实现毫秒级批量正运动学渲染或工作空间采样。
+
+---
+
+## 运算结果与产物的存放层级
+
+系统在运行各阶段生成的数学与计算结果均组织在明确的内存对象中，层级划分如下：
+
+| 层级 | 产物名称 | 存储位置与宿主 | 数据形态 | 典型用途与生命周期 |
+| :--- | :--- | :--- | :--- | :--- |
+| **拓扑与符号层** | 全局 Frame 符号位姿 | `Expander.Poses` (`containers.Map`) | $4 \times 4$ `sym` 矩阵 | 保留完整解析关系；用于解析求导、雅可比推导与结构分析。 |
+| | 闭环符号残差 | `ClosureSolver.ResidualSym` | $N \times 1$ `sym` 向量 | 闭环几何约束的代数形式，严格定义了构型的运动约束流形。 |
+| **数值算子层** | 残差/IK 数值函数句柄 | `ClosureSolver.ResidualFunc_` | `function_handle`<br/>`@(x) -> double` | 优化器高速调用，极速计算残差，脱离符号计算开销。 |
+| | 全体构件 FK 函数库 | `Expander.PoseFuncs_`<br/>(由 `compilePoseFunctions` 生成) | `containers.Map`<br/>(`frame` $\to$ `@(q)`) | 快速求得各刚体位姿，支撑超低延迟机构动画渲染与碰撞检测。 |
+| **纯数据产物层** | 轨迹位姿序列 | `buildPoseSequence` 产物 | `struct PoseSequence`<br/>(包含 Frames, Trail 等) | 无运动学依赖的纯数据切片，供 [scripts/matlab/+viz/play.m](scripts/matlab/+viz/play.m) 播放或落盘。 |
+| **落盘产物层** | 自包含模型包 | `specs/dsl/cases/<case>/generated/`<br/>(由 `solver.exportKinematics` 生成) | 独立数值 `.m` 内核 + `kinematic_metadata.json` | 跨仓库消费（PathPlanner / M-REx Generative）；契约与文件清单见 [MODEL_EXPORT.md](./MODEL_EXPORT.md)。 |
+
+---
+
+## 模型导出与外部系统集成（摘要）
+
+系统的对外交付形态是「符号工厂（编译器） → 自包含模型包 → 运行引擎（消费端）」三段式流水线：
+`+solver/exportKinematics` 把 DSL 案例编译为**就地模型包**（`specs/dsl/cases/<case>/generated/`，
+纯数值 `.m` 内核，仅依赖 base MATLAB），供 PathPlanner / M-REx Generative 等消费端直接调用。
+
+> 完整规划已分离为独立文档 **[MODEL_EXPORT.md](./MODEL_EXPORT.md)**：三段式职责与接口契约、
+> 阶段一（编译器）现状与两个符号展开根因修复、阶段二模型包产物规范、阶段三运行引擎消费场景、
+> E1–E4 实施路线、导出介质对比。
+>
+> 当前状态：**E1 导出器 v0 已落地**（2026-10-14）；E2–E4 规划中。
+
+---
 
 ## 关键设计决策
 

@@ -15,6 +15,7 @@
 | `+solver/` | [KinematicModel](#kinematicmodel) | handle 类 | 符号 FK 薄封装 + 问题构造 |
 | `+solver/` | [ClosureSolver](#closuresolver) | handle 类 | 闭环残差构造 + fmincon 求解 |
 | `+solver/` | [buildPoseSequence](#buildposesequence) | 函数 | FK 位姿序列构建（Q → PoseFrames） |
+| `+solver/` | [exportKinematics](#exportkinematics) | 函数 | 自包含模型包导出（编译器 → 模型包） |
 | `+viz/` | [mechanism](#mechanism) | 函数 | 机构装配与可视化 |
 | `+viz/` | [module](#module) | 函数 | 单模块可视化校验 |
 | `+viz/` | [animate](#animate) | 函数 | 轨迹动画兼容包装（buildPoseSequence + play） |
@@ -126,7 +127,7 @@ poses = g.propagate();  % containers.Map: frame → 4×4 sym
 4. **实例展开** (`localExpandInstance`，每个实例):
    - 加载模块 YAML → 注入几何参数
    - 展开 bodies / frames / fixed_transforms / joints
-   - joint 变量**始终**创建为 `sym` 对象
+   - joint 变量**始终**创建为 `sym(name, 'real')` 实符号（A.5.4 修复：无 `real` 假设时 `invT` 的 `R'` 会在符号展开中引入 `conj(q)`，导致表达式膨胀且数值脆弱）
    - 名前缀（如 `inst1.body`）→ 写入 `EdgeGraph_`
    - 注册 `JointVarMap`、`SymbolRegistry`
 5. **连接处理**: 极性校验（socket/plug） → `addMateBidirectional`（生成树）或 `addMateUnidirectional`（弦边）
@@ -313,6 +314,7 @@ prob = km.formulatePoseProblem(cfg);         % FK 或 IK 问题
 | `ClosureSolver` | `(edgeGraph, execConfig, jointVarMap, knownValues?)` | 构造函数：传播符号位姿 → 标定/enrich closure cuts → known 关节代换（默认 0）→ 构建符号残差 |
 | `buildResidualForCut` | `(cutIndex) → sym vector` | 为单个 closure cut 构建 6-DOF 符号残差（按 components 过滤） |
 | `buildFullResidual` | `() → sym vector` | 拼接所有 cut 的残差 |
+| `poseSym` | `(frameName) → 4×4 sym` | 「known 值已代换」的符号 frame 位姿（与残差同源；供 `solver.exportKinematics` 等下游编译/分析） |
 | `toNumericFunction` | `() → function_handle` | 将符号残差转为 `@(x)` 数值函数句柄（缓存） |
 | `verifyZeroPose` | `()` | 零位姿验证：断言 `‖residual‖ < 1e-12` |
 | `setTipTarget` | `(deltaT) → void` | 设置 tip 任务目标 ΔT 并重建符号残差（仅作用于 world 锚定切口） |
@@ -329,15 +331,19 @@ prob = km.formulatePoseProblem(cfg);         % FK 或 IK 问题
 **L2 双 frame 切口**（`near`=socket, `far`=plug）：
 
 ```
-T_expected = T_near(q) * M           % M = Rz(roll*2π/sym) * Rx(π)
-T_err      = T_expected \ T_far(q)   % 应为 I 当闭环
+T_expected = T_near(q) * M               % M = Rz(roll*2π/sym) * Rx(π)
+T_err      = inv(T_expected) * T_far(q)  % 应为 I 当闭环
 ```
 
 **L3 world 锚定切口**（`anchor: world`，`T_mate = I₄`、far 为标定常量 `T_bind`）：
 
 ```
-T_err = T_near(q) \ (ΔT⁻¹ · T_bind)  % 应为 I 当闭环
+T_err = inv(T_near(q)) * (ΔT⁻¹ · T_bind) % 应为 I 当闭环
 ```
+
+两处 `inv` 均经 `core.RigidBodyMath.invT` 以**闭式 SE(3) 逆**计算（无除法、展开小巧）；
+等价于符号 `\`，但避免行列式（Cramer）展开的 ~1e+170 巨系数在 double 求值时溢出为
+Inf/NaN（A.5.4：修复前解析雅可比在转轴关节姿态分量上有 4 个 NaN）。
 
 - `T_bind`：零位构型标定位姿（`world_binding.T` 显式提供，或由 `calibrateBinding` 自动计算；
   显式值偏离自动标定 > 1e-6 时报 `bindingMismatch`）
@@ -347,6 +353,7 @@ T_err = T_near(q) \ (ΔT⁻¹ · T_bind)  % 应为 I 当闭环
 #### 设计要点
 
 - **符号→数值编译**: `toNumericFunction()` 使用 `matlabFunction` 一次性编译，后续 `evalResidual` 直接调用数值句柄（无需重复 `subs`）。
+- **闭式逆（A.5.4）**: 切口残差的矩阵逆一律经 `core.RigidBodyMath.invT`（SE(3) 闭式逆 `[R′, −R′t]`），替代符号 `\`（行列式展开）——残差内核提速 ~8.6×（507 → 59 µs），且解析雅可比的生成代码数值稳定（无 Inf/NaN）。
 - **SQP 求解器**: 默认使用 `fmincon` 的 `sqp` 算法，tight tolerances（`OptimalityTolerance=1e-12`）。
 - **零位姿验证**: 构造函数后应调用 `verifyZeroPose()` 确认符号推导无误。
 - **组合求解**: `solveIKWithTarget` 将闭环约束 + 末端位姿目标同时优化，适用于同时满足闭环精度和 task-space 目标的场景。
@@ -418,6 +425,61 @@ viz.play(seq, scene, 'Fps', 15);
 #### See Also
 
 `viz.play`, `viz.animate`, `+ir/Expander.evaluateNumericDirect`
+
+---
+
+### exportKinematics
+
+**类型**: 函数  
+**文件**: `+solver/exportKinematics.m`  
+**签名**: `out = solver.exportKinematics(dslYaml, execYaml, Name, Value...)`  
+**职责**: 模型导出器（A.5.4 / E1）——运行完整符号管线并把编译后的数值内核导出为**自包含模型包**（默认就地写入 `<caseDir>/generated/`）。生成的 `.m` 仅依赖 base MATLAB，供 PathPlanner / M-REx Generative 等外部消费端直接调用；三段式流水线规划（编译器 → 模型包 → 运行引擎）见 [MODEL_EXPORT.md](./MODEL_EXPORT.md)。
+
+#### 名称-值选项
+
+| 选项 | 取值 | 说明 |
+|------|------|------|
+| `'OutputDir'` | char | 模型包目录；默认 `<caseDir>/generated`（<caseDir> = DSL 文件所在目录） |
+| `'KnownValues'` | `containers.Map` | known 关节的数值（canonical 名 → 值；缺省 0，同 `ClosureSolver`） |
+| `'Frames'` | cell | `fk_all` 的 frame 子集（默认全部） |
+
+#### 产物文件
+
+| 文件 | 适用模式 | 签名 | 说明 |
+|------|----------|------|------|
+| `README.md` / `kinematic_metadata.json` | 全部 | — | 包文档 + 机器可读契约（输入顺序 / 切口 / 标定 / 容差 / frame 表） |
+| `closure_residual.m` | closed_loop | `r = closure_residual(q)` | 闭环残差（mm / rad） |
+| `closure_residual_jacobian.m` | closed_loop | `J = closure_residual_jacobian(q)` | 解析雅可比 ∂r/∂q |
+| `fk_tool.m` | 全部 | `D = fk_tool(q)` | 任务位姿：L3 world 模式 = `U⁻¹·T_bind·T_near(q)⁻¹·U`（≡ `evalToolPose`）；其余 = root 锚定 endFrame 位姿 |
+| `fk_all.m` / `fk_all_matrix.m` | 全部 | `poses = fk_all(q)` | 全体 frame 位姿 struct / (4N)×4 原始内核 |
+
+**输入向量 q**：`closed_loop` = `UnknownNames` 顺序；`open_loop` = `ActuatedJoints` 顺序（均在 metadata `inputs.names`）；n×1 double 列向量；mm / rad。
+
+#### 输出
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `OutputDir` | char | 实际写入的包目录 |
+| `Files` | cell | 写入的全部文件绝对路径 |
+| `Metadata` | struct | 已序列化到 JSON 的元数据 |
+
+#### 使用示例
+
+```matlab
+% 就地导出（写入 specs/dsl/cases/m-rex-3t1r/generated/）
+out = solver.exportKinematics( ...
+    'specs/dsl/cases/m-rex-3t1r/robot_description.yaml', ...
+    'specs/dsl/cases/m-rex-3t1r/execution-config.yaml');
+
+% 消费端（无需 Symbolic Toolbox）
+addpath(out.OutputDir);
+r = closure_residual(q);  J = closure_residual_jacobian(q);
+D = fk_tool(q);           poses = fk_all(q);
+```
+
+#### See Also
+
+`+solver/ClosureSolver`, `+ir/Expander`, `+ir/ExecutionConfig`, `+solver/buildPoseSequence`
 
 ---
 

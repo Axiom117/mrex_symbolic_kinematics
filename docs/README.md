@@ -101,7 +101,8 @@ graph TD
 
 | 文件 | 说明 |
 |------|------|
-| `scripts/matlab/ARCHITECTURE.md` | **MATLAB 代码架构文档**：+viz → +ir（Expander + EdgeGraph + KinematicModel）→ +core（PosePropagator）四层架构、数据流图、设计决策。约 400 行。 |
+| `scripts/matlab/ARCHITECTURE.md` | **MATLAB 代码架构文档**：+viz → +ir（Expander + EdgeGraph + KinematicModel）→ +core（PosePropagator）四层架构、数据流图、设计决策。约 300 行。 |
+| `scripts/matlab/MODEL_EXPORT.md` | **模型导出文档**：三段式流水线（符号工厂 → 自包含模型包 → 运行引擎）、模型包产物规范（`<case>/generated/`）、E1–E4 实施路线、导出介质对比。约 150 行。 |
 | `scripts/matlab/README.md` | MATLAB 脚本用法说明（单模块可视化、机构装配可视化命令）。 |
 
 ### L8 · 背景参考
@@ -138,6 +139,7 @@ graph TD
 | `specs/ir/port-attachment.md` | Mate 连接在 IR 中的边表示（addMateBidirectional vs addMateUnidirectional） | 权威 IR 规范 | `connection-semantics.md`, `EdgeGraph.m` | `ir-graph.schema.yaml`, `ARCHITECTURE.md` |
 | `specs/schema/*.schema.yaml` | 3 份 JSON Schema：模块 YAML / DSL YAML / IR 图 的结构校验 | 可执行校验 | 对应层的权威 docs + `conventions.yaml` | 校验工具链 |
 | `scripts/matlab/ARCHITECTURE.md` | MATLAB 4 层代码架构（+viz / +ir / +core）、数据流、设计决策 | 实现文档 | 全部 IR spec, `connection-semantics.md`, `Expander.m`/`EdgeGraph.m` 代码 | `scripts/matlab/README.md` |
+| `scripts/matlab/MODEL_EXPORT.md` | 模型导出三段式规划（编译器 → 模型包 → 运行引擎）、产物规范、E1–E4 | 实现文档 | `ARCHITECTURE.md`, `API_REFERENCE.md`, `project-overview.md`（A.5.4）, `+solver/exportKinematics.m` | 消费端集成（PathPlanner / M-REx Generative）、各案例 `generated/` 产物 |
 | `docs/reference/*` | 4 份背景参考：IK 求解器、PathPlanner、Simulink 库、URDF 分析 | 背景参考 | — | `project-overview.md`（引为参考依据） |
 
 ---
@@ -155,6 +157,7 @@ graph TD
 | `Expander.m` | `dsl-to-ir-mapping.md` + `node-types.md` + `ARCHITECTURE.md` |
 | `PosePropagator.m` | `edge-types.md` + `ARCHITECTURE.md` |
 | `project-overview.md` | 阶段描述变化的对应 spec 文件（如 A.2 变更 → `grammar.md`、DSL 案例） |
+| `+solver/exportKinematics.m` / 模型包契约 | `MODEL_EXPORT.md` + `API_REFERENCE.md` + 3 个导出测试 + 重新导出各案例 `generated/`（模板变更时） |
 
 ---
 
