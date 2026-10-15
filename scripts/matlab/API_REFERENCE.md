@@ -523,7 +523,7 @@ DSL → ir.Expander (sym) → evaluateNumeric(config) → render
 |------|------|------|
 | `mechanism` | `char` | 机构名称 |
 | `poses` | `containers.Map` | `frame → 4×4 double` 数值位姿 |
-| `unplacedFrames` | `cell array` | 未能放置的 frame 列表 |
+| `unplaced` | `cell array` | 未能放置的 frame 列表 |
 
 #### 使用示例
 

@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=../../../schema/execution-config.schema.yaml
+# mrex_3t2r_001 执行配置 — 3T2R 全任务空间模式（案例唯一配置）
+#
+# 四个内部转动关节 joint_1.q … joint_4.q 全部移入 unknown，形成 10 未知量 /
+# 12 分量的完整闭环系统；释放内部关节后机构获得完整 3T2R 能力（零位实测：
+# mobility 3t2r = 3 平移 ⊕ 2 转动（rotation full），闭链流形维数 = 5，
+# 约束 Jacobian 12×10 满列秩；详见同目录 README.md § L3 执行层）。
+#
+# 重要：本文件只规定 L3 执行语义（世界绑定 / 切口 / 变量分区 / 容差），不含轨迹。
+#
+# world_binding 的 T 省略：由零位构型 FK 自动标定（solver.ClosureSolver）。
+
+mode: closed_loop
+endFrame: pipette.tip_origin
+
+# ---- L3 工具坐标系（tool_frame）—— 与 mrex_3t1r_001 同款的倾斜参考声明 ----
+# 声明后「世界系 ≡ 工具坐标系零位姿态」：pipette tip 零位姿态自动派生为
+# U⁻¹ = Ry(−45°)，用户面目标位姿 / 位姿报告以工具系表达（setToolTarget /
+# evalToolPose）。要求 root→endFrame 位姿链无关节；语义细节详见
+# specs/dsl/connection-semantics.md §6.5。
+# 删除/注释本块 → 回到历史行为：世界系 ≡ tip 零位（U = I₄）。
+tool_frame:
+  transform:
+    rotation: { rpy: [0, 45deg, 0] }
+
+world_binding:
+  - ground: manipulator_L.ground
+  - ground: manipulator_R.ground
+
+closure_cuts:
+  - near: manipulator_L.ground
+    anchor: world
+    components: [tx, ty, tz, rx, ry, rz]
+  - near: manipulator_R.ground
+    anchor: world
+    components: [tx, ty, tz, rx, ry, rz]
+
+known:
+  - pipette.tip_origin
+
+unknown:
+  - manipulator_L.dx
+  - manipulator_L.dy
+  - manipulator_L.dz
+  - manipulator_R.dx
+  - manipulator_R.dy
+  - manipulator_R.dz
+  - joint_1.q
+  - joint_2.q
+  - joint_3.q
+  - joint_4.q
+
+tolerances:
+  translation_mm: 0.001
+  rotation_rad: 0.001

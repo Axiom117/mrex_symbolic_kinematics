@@ -21,21 +21,21 @@ instances:
     type: Joint
   frame_3:
     type: Frame
-  connector_2:
-    type: Pin
+  joint_2:
+    type: Joint
   frame_4:
     type: Frame
   pipette:
     type: ToolPipette
-  connector_3:
-    type: Pin
+  joint_3:
+    type: Joint
   frame_5:
     type: Frame
-  joint_2:
+  joint_4:
     type: Joint
   frame_6:
     type: Frame
-  connector_4:
+  connector_2:
     type: Pin
   frame_7:
     type: Frame
@@ -52,22 +52,22 @@ connections:
   - ports: [frame_1.faceYPlus, connector_1.sideA]
   - ports: [connector_1.sideB, frame_2.faceYMinus]
   # --- Frame_2 → Joint_1 → Frame_3 ---
-  - ports: [frame_2.faceYPlus, joint_1.linkA]
-  - ports: [joint_1.linkB, frame_3.faceYMinus]
-  # --- Frame_3 → Connector_2(Pin) → Frame_4 ---
-  - ports: [frame_3.faceYPlus, connector_2.sideA]
-  - ports: [connector_2.sideB, frame_4.faceYMinus]
+  - ports: [frame_2.faceZMinus, joint_1.linkA]
+  - ports: [joint_1.linkB, frame_3.faceZPlus]
+  # --- Frame_3 → Joint_2 → Frame_4 ---
+  - ports: [frame_3.faceYPlus, joint_2.linkA]
+  - ports: [joint_2.linkB, frame_4.faceYMinus]
   # --- Frame_4 → ToolPipette（工具末端分支，ToolPipette 仅有 connector_side 一个 exposed 端口）---
   - ports: [frame_4.faceXPlus, pipette.connector_side]
-  # --- Frame_4 → Connector_3(Pin) → Frame_5 ---
-  - ports: [frame_4.faceYPlus, connector_3.sideA]
-  - ports: [connector_3.sideB, frame_5.faceYMinus]
-  # --- Frame_5 → Joint_2 → Frame_6 --- （主运动链延续，从 Frame_4 另一面出发）
-  - ports: [frame_5.faceYPlus, joint_2.linkA]
-  - ports: [joint_2.linkB, frame_6.faceYMinus]
-  # --- Frame_6 → Connector_4(Pin) → Frame_7 ---
-  - ports: [frame_6.faceYPlus, connector_4.sideA]
-  - ports: [connector_4.sideB, frame_7.faceYMinus]
+  # --- Frame_4 → Joint_3 → Frame_5 ---
+  - ports: [frame_4.faceYPlus, joint_3.linkA]
+  - ports: [joint_3.linkB, frame_5.faceYMinus]
+  # --- Frame_5 → Joint_4 → Frame_6 --- （主运动链延续，从 Frame_4 另一面出发）
+  - ports: [frame_5.faceZMinus, joint_4.linkA]
+  - ports: [joint_4.linkB, frame_6.faceZPlus]
+  # --- Frame_6 → Connector_2(Pin) → Frame_7 ---
+  - ports: [frame_6.faceYPlus, connector_2.sideA]
+  - ports: [connector_2.sideB, frame_7.faceYMinus]
   # --- Frame_7 → Adaptor_R → Manipulator_R ---
   - ports: [frame_7.faceXMinus, adaptor_R.pin_connector_B]
   - ports: [adaptor_R.attachment_point, manipulator_R.dock]
