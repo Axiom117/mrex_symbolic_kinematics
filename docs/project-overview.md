@@ -850,6 +850,8 @@ flowchart LR
 | `specs/dsl/cases/<case>/generated/*` | 就地模型包（gitignored 生成物） |
 | `tests/pipeline/test_export_kinematics_{m_rex_3t1r,single_closed_loop,open_chain_2r}.m` | 三案例导出契约测试 |
 
+**E1 v0.2（2026-10-15）：泛化任务空间元数据** —— 导出器新增 `solver.TaskSpaceAnalyzer` 瞬时分析（纯数值，零位探针）：元数据新增 `inputs.types / inputs.axes`（任务系轴标签；m-rex-3t1r → `[x y z x y z r1 r1]`）与 `task_space {mobility, rotation {mode, axis}, dims, probe}`（m-rex-3t1r → `3t1r`，旋转轴 $[1\,0\,1]/\sqrt2$，流形 4 维）。关键校核：流形分析须用 ground-ground 相对约束——world 切口导出残差为「双 ground 钉零位」过定形式（12 分量对 8 未知量，Jacobian 满列秩 8），不可用于机动度分析。下游 `mrex_generative` 的 `mrex.ConfigGenerator` 据此自动派生扫描轴向 / 旋转轴与类型-轴向限位规则（policy `families` 降级为后备 / `"override": true` 显式覆盖）——**dsl → IK/FK 模型导出 → 工作空间评估全链路打通**（2026-10-15 端到端实测：`generate_configs` → `evaluate_workspace`；m-rex-3t1r 14641 点 / 437 可行 / 13.1 s）。三案例导出测试断言扩展后全绿；mrex_generative `run_all` 新增 task_space 主路径与 legacy 回退（名字通配限位 + 家族后备）两条测试全绿。
+
 **后续（详见 ARCHITECTURE.md E2–E4）**：最小运行引擎（GN/LM + warm-start）、PathPlanner / Generative 消费端集成、C-MEX 与 JSON 计算图介质扩展。
 
 ### 阶段 A.6 · 测试顺序与验证样例

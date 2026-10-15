@@ -3,7 +3,8 @@ function test_export_kinematics_open_chain_2r()
 %   Runs solver.exportKinematics on the open-chain-2r case (open_loop mode:
 %   FK-only package, inputs = actuated joints) and verifies:
 %     [1] package written to <case>/generated; no residual/jacobian files
-%     [2] metadata: open_loop / FK / actuated_joints input order, no closure
+%     [2] metadata: open_loop / FK / actuated_joints input order, no closure,
+%         task_space (mobility 0t2r / mode full — two distinct revolute axes)
 %     [3] fk_tool.m = endFrame FK, matches Expander numeric FK at test values
 %     [4] fk_all.m: all frames, spot-check vs Expander numeric FK
 %
@@ -61,8 +62,21 @@ function test_export_kinematics_open_chain_2r()
     assert(~isfield(meta, 'closure'), 'open_loop metadata must not have closure');
     assert(strcmp(meta.task_frame.framing, 'root'), 'metadata task framing');
     assert(strcmp(meta.task_frame.end_frame, cfg.EndFrame), 'metadata end frame');
-    fprintf('  [2] metadata: open_loop/FK, inputs = {%s}, no closure block\n', ...
-        strjoin(meta.inputs.names, ', '));
+    % task-space metadata（泛化字段：inputs.types/axes + task_space）
+    assert(isequal(reshape(cellstr(meta.inputs.types), 1, []), ...
+        {'revolute', 'revolute'}), 'input types');
+    assert(isequal(reshape(cellstr(meta.inputs.axes), 1, []), ...
+        {'r1', 'r2'}), 'input axis labels (two distinct revolute directions)');
+    assert(strcmp(meta.task_space.mobility, '0t2r'), 'mobility');
+    assert(strcmp(meta.task_space.rotation.mode, 'full'), ...
+        'two distinct rotation axes -> mode full (downstream falls back to policy)');
+    assert(meta.task_space.probe.manifold_dim == 2 && ...
+        meta.task_space.probe.constraint_rank == 0, ...
+        'open loop: no closure constraint, manifold = full joint space');
+    fprintf(['  [2] metadata: open_loop/FK, inputs = {%s}, no closure block; ' ...
+        'task_space %s (%s), axes [%s]\n'], strjoin(meta.inputs.names, ', '), ...
+        meta.task_space.mobility, meta.task_space.rotation.mode, ...
+        strjoin(reshape(cellstr(meta.inputs.axes), 1, []), ' '));
 
     % ---- load generated kernels ----
     addpath(exportedDir);

@@ -4,7 +4,8 @@ function test_export_kinematics_single_closed_loop()
 %   L2 frame-pair cut auto-derived from the DSL `closed: true` connection)
 %   and verifies the exported package:
 %     [1] package written to <case>/generated (default OutputDir)
-%     [2] metadata: auto closure source, cut/frame-pair fields, root-framed task
+%     [2] metadata: auto closure source, cut/frame-pair fields, root-framed task,
+%         task_space (mobility 0t1r, rotation axis = x)
 %     [3] closure_residual.m matches ClosureSolver.evalResidual; r(0) ≈ 0
 %     [4] closure_residual_jacobian.m: finite, matches central FD
 %     [5] fk_tool.m = endFrame pose, matches Expander numeric FK
@@ -69,8 +70,21 @@ function test_export_kinematics_single_closed_loop()
     assert(devM < 1e-12, 'T_mate round-trip dev %.3e', devM);
     assert(strcmp(meta.task_frame.framing, 'root'), 'metadata task framing');
     assert(strcmp(meta.task_frame.end_frame, cfg.EndFrame), 'metadata end frame');
-    fprintf('  [2] metadata: auto cut (%d comps), frame-pair fields, root framing OK\n', ...
-        meta.closure.num_components);
+    % task-space metadata（泛化字段：inputs.types/axes + task_space）
+    assert(all(strcmp(reshape(cellstr(meta.inputs.types), 1, []), 'revolute')), ...
+        'input types');
+    assert(isequal(reshape(cellstr(meta.inputs.axes), 1, []), ...
+        {'r1', 'r1', 'r1', 'r1'}), 'input axis labels (coaxial hinges)');
+    assert(strcmp(meta.task_space.mobility, '0t1r'), 'mobility');
+    assert(strcmp(meta.task_space.rotation.mode, 'axis'), 'rotation mode');
+    devAx = norm(meta.task_space.rotation.axis(:).' - [1 0 0]);
+    assert(devAx < 1e-9, 'rotation axis dev %.3e', devAx);
+    assert(meta.task_space.probe.manifold_dim == 1 && ...
+        meta.task_space.probe.constraint_rank == 3, 'probe ranks');
+    fprintf(['  [2] metadata: auto cut (%d comps), frame-pair fields, root framing; ' ...
+        'task_space %s, axis [%.3f %.3f %.3f], manifold %d\n'], ...
+        meta.closure.num_components, meta.task_space.mobility, ...
+        meta.task_space.rotation.axis, meta.task_space.probe.manifold_dim);
 
     % ---- load generated kernels ----
     addpath(exportedDir);

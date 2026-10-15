@@ -45,6 +45,18 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
 %     open_loop   : actuated joints (ExecutionConfig.ActuatedJoints order)
 %   Units: translations in mm, rotations in rad.
 %
+%   Generic task-space metadata (package_version 0.2): solver.TaskSpaceAnalyzer
+%   derives, at the zero pose, the task-space contract consumed by downstream
+%   tooling: inputs.types ('prismatic'/'revolute'), inputs.axes (task-frame
+%   motion-axis labels — 'x'/'y'/'z' for axis-aligned prismatic joints,
+%   'u#'/'r#' direction clusters otherwise) and task_space {mobility ('3t1r',
+%   ...), rotation {mode 'none'/'axis'/'full', axis}, dims, probe}.
+%   mrex_generative's mrex.ConfigGenerator consumes task_space to derive the
+%   sweep axes / rotation axis without hand-written per-mobility policy rules
+%   (the policy's families become a fallback / explicit override).  If the
+%   zero pose is not classifiable (rotation.mode = 'full'), consumers fall
+%   back to their policy rules.
+%
 %   Output OUT (struct):
 %     .OutputDir : char — package directory actually written
 %     .Files     : cell — absolute paths of all files written
@@ -256,13 +268,53 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
         localDeambiguateDoubleNegation(fullfile(outputDir, kernelFiles{ki}));
     end
 
+    % ---- task-space analysis（泛化元数据：inputs.types/axes + task_space）----
+    % 纯数值瞬时分析（solver.TaskSpaceAnalyzer）：零位探针处提取 mobility /
+    % 旋转轴 / 输入类型与轴向标签 —— 下游（mrex_generative 配置生成）据此
+    % 自动派生扫描网格与限位规则，不再依赖逐机构手工规则。
+    t0 = tic;
+    probe = struct();
+    probe.names = inNames(:).';
+    probe.probeQ = zeros(nIn, 1);
+    if isClosed
+        probe.constraintFcn = localLoopConstraintFcn(cs);
+        poseAtZero = @(node) localEvalSym(cs.poseSym(node), ...
+            cs.UnknownSyms, zeros(1, nIn));
+    else
+        probe.constraintFcn = [];
+        poseAtZero = @(node) localEvalSym(poseOf(node), ...
+            inSyms, zeros(1, nIn));
+    end
+    if hasWorld
+        % 世界锚定（L3）：任务位姿 = 工具共轭变换（同 fk_tool 导出）
+        probe.poseFcn = @(q) cs.evalToolPose(q);
+        probe.toolU = cs.ToolTransform;
+    else
+        % 开环 / L2 内部闭环：任务位姿 = root 锚定 endFrame 位姿（同 fk_tool 导出）
+        probe.poseFcn = @(q) double(subs(Dsym, inSyms, q(:).'));
+        probe.toolU = eye(4);
+    end
+    [probe.kinds, probe.axesRoot, noRecord] = ...
+        localInputMotionInfo(e, inNames, poseAtZero);
+    if ~isempty(noRecord)
+        warning('solver:exportKinematics:noJointRecord', ...
+            ['No joint record for input(s): %s — types fall back to name ' ...
+             'heuristics; their axis labels are left empty.'], ...
+            strjoin(noRecord, ', '));
+    end
+    ts = solver.TaskSpaceAnalyzer.analyze(probe);
+    fprintf(['  [export] task_space: mobility %s | rotation %s | ' ...
+        'manifold %d | axes [%s] (%.1fs)\n'], ...
+        ts.mobility, localRotationSummary(ts.rotation), ...
+        ts.probe.manifold_dim, strjoin(ts.axes, ' '), toc(t0));
+
     % ---- metadata (machine-readable package contract) ----
     meta = struct();
     meta.package_format = 'smk-kinematic-package';
-    meta.package_version = 0.1;
+    meta.package_version = 0.2;
     gen = struct();
     gen.entry = 'solver.exportKinematics';
-    gen.version = '0.1.0';
+    gen.version = '0.2.0';
     gen.matlab_release = version('-release');
     gen.generated_at = char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
     meta.generator = gen;
@@ -280,6 +332,8 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
     inputsMeta = struct();
     inputsMeta.kind = inputKind;
     inputsMeta.names = inNames;   % canonical names — column order of q
+    inputsMeta.types = ts.types;  % per-input joint kind: prismatic / revolute
+    inputsMeta.axes = ts.axes;    % per-input motion-axis label (task frame)
     inputsMeta.count = nIn;
     meta.inputs = inputsMeta;
 
@@ -335,6 +389,15 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
         tfMeta.U = localRows(eye(4));
     end
     meta.task_frame = tfMeta;
+
+    % ---- task space（泛化元数据；来源 solver.TaskSpaceAnalyzer）----
+    % mobility  / 旋转轴（mode = axis 时为任务系单位向量，与下游扫描的 phi
+    % 轴同约定） / 维数 / 探针诊断（零位 q、物理环约束秩、流形维数）。
+    meta.task_space = struct();
+    meta.task_space.mobility = ts.mobility;
+    meta.task_space.rotation = ts.rotation;
+    meta.task_space.dims = ts.dims;
+    meta.task_space.probe = ts.probe;
 
     stats = struct();
     stats.instances = numel(e.Instances);
@@ -536,6 +599,32 @@ function localWriteReadme(filePath, e, cfg, meta, inNames, nIn, outputDir, ...
     L{end+1} = '';
     L{end+1} = zeroNote;
     L{end+1} = '';
+    L{end+1} = sprintf('输入类型：%s；运动轴标签（任务系）：`%s`。', ...
+        strjoin(cellfun(@(t) sprintf('`%s`', t), meta.inputs.types, ...
+        'UniformOutput', false), ' / '), ...
+        strjoin(meta.inputs.axes, ' '));
+    L{end+1} = '';
+    L{end+1} = '## 任务空间（瞬时分析）';
+    L{end+1} = '';
+    L{end+1} = sprintf(['- mobility = `%s`：任务旋量 %d 维（平移 %d ⊕ 旋转 %d）；' ...
+        '闭环流形 %d 维（零位探针）。'], ...
+        meta.task_space.mobility, meta.task_space.dims.task, ...
+        meta.task_space.dims.translation, meta.task_space.dims.rotation, ...
+        meta.task_space.probe.manifold_dim);
+    switch meta.task_space.rotation.mode
+        case 'axis'
+            L{end+1} = sprintf(['- 旋转自由度：绕任务系轴 `[%.4f %.4f %.4f]` 的单参数旋转' ...
+                '（phi 扫描轴；下游工作空间评估同约定）。'], ...
+                meta.task_space.rotation.axis);
+        case 'none'
+            L{end+1} = '- 旋转自由度：无（纯平移任务空间）。';
+        otherwise
+            L{end+1} = '- 旋转自由度：多轴（mode = full；下游须显式指定扫描策略）。';
+    end
+    L{end+1} = '';
+    L{end+1} = '> `task_space` / `inputs.types` / `inputs.axes` 由 `solver.TaskSpaceAnalyzer` 自动提取，';
+    L{end+1} = '> 供 mrex_generative 等下游免手工规则派生扫描配置；字段语义见 `scripts/matlab/MODEL_EXPORT.md`。';
+    L{end+1} = '';
     L{end+1} = '## 文件';
     L{end+1} = '';
     L{end+1} = '| 文件 | 签名 | 语义 |';
@@ -581,4 +670,124 @@ function localWriteReadme(filePath, e, cfg, meta, inNames, nIn, outputDir, ...
     fwrite(fid, strjoin(L, newline), 'char');
     fwrite(fid, newline, 'char');
     fclose(fid);
+end
+
+function T = localEvalSym(T, syms, vals)
+%LOCALEVALSYM  subs 求值（常量位姿直接转 double）。
+    if isa(T, 'sym')
+        T = double(subs(T, syms, vals));
+    else
+        T = double(T);
+    end
+end
+
+function [kinds, axesRoot, missing] = localInputMotionInfo(e, inNames, poseAtZero)
+%LOCALINPUTMOTIONINFO  逐输入的关节类型与装配零位运动轴（root 系方向）。
+%   poseAtZero : @(nodeName) → 4×4 double — 该 frame 零位构型下的 root 位姿。
+%   关节记录来自 Expander 实例表（kind / 局部轴），运动轴经该关节
+%   from_frame 的零位姿态旋转到 root 系。无记录时类型回退到名字启发式
+%   （*.dx/*.dy/*.dz → prismatic），轴向留空（标签 ''）。
+    kinds = cell(1, numel(inNames));
+    axesRoot = zeros(numel(inNames), 3);
+    missing = {};
+    for i = 1:numel(inNames)
+        [kind, node, axLocal] = localJointRecord(e, inNames{i});
+        if isempty(kind)
+            if any(endsWith(inNames{i}, {'.dx', '.dy', '.dz'}))
+                kind = 'prismatic';
+            else
+                kind = 'revolute';
+            end
+            missing{end + 1} = inNames{i}; %#ok<AGROW>
+        else
+            T = poseAtZero(node);
+            d = T(1:3, 1:3) * axLocal(:);
+            nd = norm(d);
+            if nd > 1e-9
+                axesRoot(i, :) = (d / nd).';
+            end
+        end
+        kinds{i} = kind;
+    end
+end
+
+function [kind, node, axLocal] = localJointRecord(e, varName)
+%LOCALJOINTRECORD  按规范名（instance.variable）查实例关节记录。
+    kind = ''; node = ''; axLocal = [];
+    for i = 1:numel(e.Instances)
+        inst = e.Instances(i);
+        for k = 1:numel(inst.joints)
+            if strcmp([inst.name '.' inst.joints{k}.var], varName)
+                kind = inst.joints{k}.kind;
+                node = inst.joints{k}.node;
+                axLocal = inst.joints{k}.axis;
+                return;
+            end
+        end
+    end
+end
+
+function fcn = localLoopConstraintFcn(cs)
+%LOCALLOOPCONSTRAINTFCN  物理环约束误差向量（供 TaskSpaceAnalyzer 的流形分析）。
+%   world 锚定切口：导出残差把两个 ground 各自钉在零位标定上（12 分量对 8 未知
+%   量过定，是"双 ground 钉零位"形式，不能用于流形分析）；物理约束只含
+%   ground-ground 相对关系，故按相对化形式构造：
+%       X_j = invT(T_1) · T_j · invT(invT(G_1) · G_j),  j = 2..nWorld
+%   frame-pair 切口（L2）：X = invT(T_near · M) · T_far，按 components 掩码。
+%   单个 world 切口（无环）时返回空约束（流形 = 全关节空间）。
+    cuts = cs.ClosureCuts;
+    isWorld = strcmp({cuts.anchor}, 'world');
+    wIdx = find(isWorld);
+    pIdx = find(~isWorld);
+    allComps = {'tx', 'ty', 'tz', 'rx', 'ry', 'rz'};
+    fcn = @evalConstraint;
+
+    function r = evalConstraint(q)
+        r = zeros(0, 1);
+        if ~isempty(wIdx)
+            T1 = evalFrame(cuts(wIdx(1)).near, q);
+            G1i = core.RigidBodyMath.invT(cuts(wIdx(1)).T_bind);
+            for j = wIdx(2:end)
+                Tj = evalFrame(cuts(j).near, q);
+                X = core.RigidBodyMath.invT(T1) * Tj * ...
+                    core.RigidBodyMath.invT(G1i * cuts(j).T_bind);
+                r = [r; localPoseErrVec(X)]; %#ok<AGROW>
+            end
+        end
+        for j = pIdx
+            Tn = evalFrame(cuts(j).near, q);
+            Tf = evalFrame(cuts(j).far, q);
+            X = core.RigidBodyMath.invT(Tn * cuts(j).T_mate) * Tf;
+            v = localPoseErrVec(X);
+            if isfield(cuts(j), 'components') && ~isempty(cuts(j).components)
+                v = v(ismember(allComps, cuts(j).components));
+            end
+            r = [r; v]; %#ok<AGROW>
+        end
+    end
+
+    function T = evalFrame(name, q)
+        S = cs.poseSym(name);
+        if isa(S, 'sym')
+            T = double(subs(S, cs.UnknownSyms, q(:).'));
+        else
+            T = double(S);
+        end
+    end
+end
+
+function v = localPoseErrVec(X)
+%LOCALPOSEERRVEC  4×4 相对位姿 → 6 维误差向量（平移 + 0.5·vee(R−Rᵀ)，X = I 时为零）。
+    R = X(1:3, 1:3);
+    v = [X(1:3, 4); 0.5 * [R(3, 2) - R(2, 3); R(1, 3) - R(3, 1); R(2, 1) - R(1, 2)]];
+end
+
+function s = localRotationSummary(rot)
+%LOCALROTATIONSUMMARY  旋转分类的单行摘要（导出日志用）。
+    switch rot.mode
+        case 'axis'
+            s = sprintf('axis [%.3f %.3f %.3f]', rot.axis);
+        otherwise
+            s = rot.mode;
+    end
 end

@@ -10,6 +10,8 @@ function test_export_kinematics_m_rex_3t1r()
 %     [5] fk_tool.m matches ClosureSolver.evalToolPose; fk_tool(0) = I₄
 %     [6] fk_all.m: all 96 frames, spot-check vs Expander numeric FK
 %     [7] README.md documents the package contract
+%     [8] task-space metadata: inputs.types/axes + task_space (mobility 3t1r,
+%         rotation axis [1,0,1]/√2, probe ranks) — the generic downstream contract
 %
 %   Writes (regenerated on every run): specs/dsl/cases/m-rex-3t1r/generated/
 %   (gitignored generated artifacts).
@@ -157,5 +159,27 @@ function test_export_kinematics_m_rex_3t1r()
         contains(txt, 'solver.exportKinematics'), 'README content');
     fprintf('  [7] README.md documents the package contract\n');
 
+    % ---- [8] task-space metadata（泛化字段：inputs.types/axes + task_space）----
+    assert(numel(meta.inputs.types) == meta.inputs.count, 'types length');
+    types = reshape(cellstr(meta.inputs.types), 1, []);
+    assert(all(strcmp(types(1:6), 'prismatic')) && ...
+        all(strcmp(types(7:8), 'revolute')), 'input types');
+    assert(isequal(reshape(cellstr(meta.inputs.axes), 1, []), ...
+        {'x', 'y', 'z', 'x', 'y', 'z', 'r1', 'r1'}), 'input axis labels');
+    assert(strcmp(meta.task_space.mobility, '3t1r'), 'mobility');
+    assert(strcmp(meta.task_space.rotation.mode, 'axis'), 'rotation mode');
+    aRef = [1 0 1] / sqrt(2);
+    devA = norm(meta.task_space.rotation.axis(:).' - aRef);
+    assert(meta.task_space.rotation.axis(1) > 0 && devA < 1e-9, ...
+        'rotation axis dev %.3e', devA);
+    assert(meta.task_space.dims.task == 4 && ...
+        meta.task_space.dims.translation == 3 && ...
+        meta.task_space.dims.rotation == 1, 'task dims');
+    assert(meta.task_space.probe.constraint_rank == 4 && ...
+        meta.task_space.probe.manifold_dim == 4, 'probe ranks');
+    fprintf(['  [8] task_space: %s, axis [%.3f %.3f %.3f], manifold %d; ' ...
+        'axes [%s]\n'], meta.task_space.mobility, ...
+        meta.task_space.rotation.axis, meta.task_space.probe.manifold_dim, ...
+        strjoin(cellstr(meta.inputs.axes), ' '));
     fprintf('=== ALL CHECKS PASSED ===\n');
 end
