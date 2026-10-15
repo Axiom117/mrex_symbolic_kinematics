@@ -19,7 +19,7 @@ function animate(dslYaml, jointTrajectory, varNames, fps, varargin)
 %     'root'  (default) — tool-rooted FK poses rendered as-is (root pinned).
 %     'world' — re-express every pose in the world frame via
 %               E(q) = T_bind * inv(T_tip<-ground_ref(q)), so that for L3
-%               world-closed-loop mechanisms (e.g. m-rex-3t1r) the Manipulator
+%               world-closed-loop mechanisms (e.g. mrex-3t1r_001) the Manipulator
 %               ground frames stay fixed at their calibrated world bindings
 %               while the tool visibly travels.  Requires frames with
 %               semantic_tag == 'ground'.  T_bind is taken from the zero-pose

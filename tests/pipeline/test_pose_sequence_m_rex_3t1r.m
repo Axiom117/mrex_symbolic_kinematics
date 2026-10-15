@@ -1,6 +1,6 @@
 function test_pose_sequence_m_rex_3t1r()
 %TEST_POSE_SEQUENCE_M_REX_3T1R  Pose-sequence product contract checks (A.5.2.0).
-%   Verifies solver.buildPoseSequence / viz.sceneSpec on the m-rex-3t1r
+%   Verifies solver.buildPoseSequence / viz.sceneSpec on the mrex-3t1r_001
 %   pipeline — the compute-layer product consumed by the pure renderer
 %   (viz.play):
 %     [1] root anchor: frame count, full frame set (all poses + root),
@@ -23,7 +23,7 @@ function test_pose_sequence_m_rex_3t1r()
     rootDir = fileparts(fileparts(fileparts(mfilename('fullpath'))));
     addpath(genpath(fullfile(rootDir, 'scripts', 'matlab')));
 
-    dslFile = fullfile(rootDir, 'specs', 'dsl', 'cases', 'm-rex-3t1r', ...
+    dslFile = fullfile(rootDir, 'specs', 'dsl', 'cases', 'mrex-3t1r_001', ...
         'robot_description.yaml');
 
     fprintf('=== test_pose_sequence_m_rex_3t1r: pose-sequence contract ===\n');

@@ -65,9 +65,9 @@ graph TB
 
 **E1 v0.2（2026-10-15）：泛化任务空间元数据** —— 导出时新增 `solver.TaskSpaceAnalyzer` 的瞬时分析（纯数值，零位探针，中央差分）：
 
-- `inputs.types`（逐输入 `prismatic` / `revolute`，源自 Expander 关节记录）与 `inputs.axes`（任务系运动轴标签：棱柱与 ±x/±y/±z 对齐记 `x`/`y`/`z`，其余方向按平行聚类 `u#`；旋转按方向聚类 `r#`。例：m-rex-3t1r → `["x" "y" "z" "x" "y" "z" "r1" "r1"]`）；
+- `inputs.types`（逐输入 `prismatic` / `revolute`，源自 Expander 关节记录）与 `inputs.axes`（任务系运动轴标签：棱柱与 ±x/±y/±z 对齐记 `x`/`y`/`z`，其余方向按平行聚类 `u#`；旋转按方向聚类 `r#`。例：mrex-3t1r_001 → `["x" "y" "z" "x" "y" "z" "r1" "r1"]`）；
 - `task_space {mobility, rotation {mode, axis}, dims, probe}`：mobility = "NtMr" 一阶分解（t = 纯平动子空间维数，r = 角速度投影秩；r = 1 时 mode = axis 给出任务系旋转轴）；`probe` 记录零位探针 q、物理环约束秩与流形维数。
-- **关键点（流形分析对象）**：world 锚定切口的导出残差是「双 ground 各自钉零位标定」形式，12 分量对 8 未知量过定（其 Jacobian 满列秩），**不能**用于流形 / 机动度分析；必须使用 ground-ground **相对约束** $T_{near,1}^{-1}T_{near,2} = G_1^{-1}G_2$。实测 m-rex-3t1r：相对约束秩 4 → 流形 4 维，任务旋量空间 = 3 平移 ⊕ 1 旋转（轴 $[1\,0\,1]/\sqrt{2}$，任务系），零位与已解可行点结果一致。
+- **关键点（流形分析对象）**：world 锚定切口的导出残差是「双 ground 各自钉零位标定」形式，12 分量对 8 未知量过定（其 Jacobian 满列秩），**不能**用于流形 / 机动度分析；必须使用 ground-ground **相对约束** $T_{near,1}^{-1}T_{near,2} = G_1^{-1}G_2$。实测 mrex-3t1r_001：相对约束秩 4 → 流形 4 维，任务旋量空间 = 3 平移 ⊕ 1 旋转（轴 $[1\,0\,1]/\sqrt{2}$，任务系），零位与已解可行点结果一致。
 - **消费端联动**：`mrex_generative` 的 `mrex.ConfigGenerator` 以 `task_space` 自动派生扫描轴向与旋转轴（policy `families` 降级为后备 / `"override": true` 显式覆盖），以 `inputs.types/axes` 支持按类型 / 轴向标签匹配限位规则 —— dsl → 导出 → 工作空间评估全链路无需逐机构手工规则。
 
 ---
@@ -89,7 +89,7 @@ graph TB
 
 **kinematic_metadata.json 关键字段**：`mechanism / mode / direction / end_frame / units`、`sources`（dsl、execution-config、模块库路径）、`inputs {kind, names, count, types, axes}`（v0.2 起含类型与任务系轴向标签）、`known_joint_values`、`closure {source, num_cuts, num_components, cuts[]（near / far / anchor / components / T_mate / T_bind）}`、`tolerances`、`task_frame {framing, end_frame, reference_ground, tool_conjugated, U}`、`task_space {mobility, rotation {mode, axis}, dims {task, translation, rotation}, probe {q, constraint_rank, manifold_dim}}`（v0.2 泛化元数据，见 §2 末）、`mechanism_stats`、`frames[] {index, node, field}`（fk_all 行块 ↔ 字段映射）、`functions`（各内核签名与输出尺寸）。
 
-**实测（m-rex-3t1r，MATLAB R2026a 无头）**：导出总耗时 ~2.8 s；8 输入 / 12 分量 / 96 frames；`closure_residual` vs `ClosureSolver.evalResidual` 偏差 7.8e-15；`fk_tool` vs `evalToolPose` 8.4e-15；`fk_all` 抽检 ≤ 8e-15；残差内核单次求值 ~59 µs。
+**实测（mrex-3t1r_001，MATLAB R2026a 无头）**：导出总耗时 ~2.8 s；8 输入 / 12 分量 / 96 frames；`closure_residual` vs `ClosureSolver.evalResidual` 偏差 7.8e-15；`fk_tool` vs `evalToolPose` 8.4e-15；`fk_all` 抽检 ≤ 8e-15；残差内核单次求值 ~59 µs。
 
 ---
 

@@ -727,7 +727,7 @@ function err = localSymbolicPoseErrorFromRelative(T_rel)
     % equivalent atan2(-R31, sqrt(R11^2+R21^2)).  The atan2 form forces a
     % symbolic sqrt of a sum of squares whose expansion introduces conj()
     % terms and enormous rational coefficients; for mechanisms with heavily
-    % expanded symbolic poses (e.g. m-rex-3t1r with full 6-component cuts)
+    % expanded symbolic poses (e.g. mrex-3t1r_001 with full 6-component cuts)
     % the generated numeric code then cancels/overflows to NaN.  asin is
     % division- and sqrt-free and has the identical branch: both return the
     % ZYX ry ∈ [-π/2, π/2].

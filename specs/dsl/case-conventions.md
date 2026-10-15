@@ -98,4 +98,4 @@ flowchart TD
 |------|------|------|
 | [open-chain-2r](./open-chain-2r/) | 开链 | 2R 平面机械臂，最简串联链 |
 | [single-closed-loop](./single-closed-loop/) | 单闭环 | 平行四边形机构等单回路闭链 |
-| [m-rex-3t1r](./m-rex-3t1r/) | 3T1R 闭链 | 两端 Manipulator 驱动的 M-REx 闭环链，含工具分支 |
+| [mrex-3t1r_001](./mrex-3t1r_001/) | 3T1R 闭链 | 两端 Manipulator 驱动的 M-REx 闭环链，含工具分支 |

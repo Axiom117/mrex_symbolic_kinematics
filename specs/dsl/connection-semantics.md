@@ -215,7 +215,7 @@ $$T_{\text{residual},i} = T_{\text{near},i}(q)^{-1} \cdot (\Delta T^{-1} \cdot T
   在全部关节零位下自动计算（显式值偏离自动标定 > 1e-6 时报错）。
 - $\Delta T$：tip 任务目标（`setTipTarget`，默认 $I_4$ —— 纯闭环/零位验证；
   声明 `tool_frame` 时用户面接口为 `setToolTarget`，见 §6.5）。
-- 实例：`cases/m-rex-3t1r/execution-config.yaml`；端到端验证：
+- 实例：`cases/mrex-3t1r_001/execution-config.yaml`；端到端验证：
   `tests/pipeline/test_closure_solver_m_rex_3t1r.m`。
 
 ---
@@ -257,7 +257,7 @@ $U = T_{\text{root}\leftarrow\text{tool}} = T_{\text{root}\leftarrow\text{endFra
 - 未声明 `tool_frame` 时行为与历史完全一致（世界 ≡ endFrame 零位，$U = I_4$，
   `setToolTarget` ≡ `setTipTarget`）。
 - Tool frame 为 L3 虚拟帧，不进入 IR / symbolRegistry；`endFrame` 仍指向物理帧。
-- 实例：`cases/m-rex-3t1r/execution-config.yaml` 已默认声明该块（`rpy: [0, 45deg, 0]`）——
+- 实例：`cases/mrex-3t1r_001/execution-config.yaml` 已默认声明该块（`rpy: [0, 45deg, 0]`）——
   「工具系零位与世界系对齐 + tip 初始倾斜 −45°」的参考用法（删除/注释该块即回到历史行为）。
 
 ---

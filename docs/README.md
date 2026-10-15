@@ -77,7 +77,7 @@ graph TD
 | `specs/dsl/case-conventions.md` | DSL 案例目录规范、README 模板、Mermaid 装配流程图 7 规则。 |
 | `specs/dsl/cases/open-chain-2r/` | 案例：2R 开环链（`robot_description.yaml` + `joint_config.yaml` + `execution-config.yaml` + `README.md`） |
 | `specs/dsl/cases/single-closed-loop/` | 案例：平行四边形单闭环（同上结构） |
-| `specs/dsl/cases/m-rex-3t1r/` | 案例：M-REx 3T1R 世界系闭环（同上结构） |
+| `specs/dsl/cases/mrex-3t1r_001/` | 案例：M-REx 3T1R 世界系闭环（同上结构） |
 
 ### L5 · IR 中间表示（A.3）
 

@@ -450,7 +450,7 @@ flowchart LR
 | 闭环类型 | 切口来源 | 验证案例 | 主要用途 |
 |------|------|------|------|
 | **L2 内部闭环** | DSL `closed: true` 标记的端口连接 | `single-closed-loop`（平行四边形 4 杆） | 验证回路识别/约束构造逻辑，为 L3 打基础 |
-| **L3 世界系闭环** | L3 execution-config `closure_cuts` | `m-rex-3t1r`（两端 Manipulator 笛卡尔驱动） | **M-REx 主构型，当前主导部署模式** |
+| **L3 世界系闭环** | L3 execution-config `closure_cuts` | `mrex-3t1r_001`（两端 Manipulator 笛卡尔驱动） | **M-REx 主构型，当前主导部署模式** |
 
 两类闭环的残差公式完全一致 $T_{\text{residual}} = (T_{\text{near}} \cdot M)^{-1} \cdot T_{\text{far}}$（其中 $M$ 为切口处的 mate 变换）——区别仅在于切口位置由 DSL 还是 L3 指定，以及未知量是机构内部关节还是外部驱动关节。
 
@@ -523,7 +523,7 @@ flowchart LR
 > **状态（2026-10-10）**：✅ 已完成。按 B2 方案落地（保持 tool-rooted，ground 位姿匹配）：
 > L3 切口采用 `anchor: world` 声明 + `world_binding` 零位自动标定（`ClosureSolver.calibrateBinding`），
 > 新增 `KNOWNVALUES` known 关节代换与 `setTipTarget(ΔT)` 任务目标；产出
-> `specs/dsl/cases/m-rex-3t1r/execution-config.yaml` 与
+> `specs/dsl/cases/mrex-3t1r_001/execution-config.yaml` 与
 > `tests/pipeline/test_closure_solver_m_rex_3t1r.m`（全绿）。
 > 实测：零位残差 1.07e-15；平移目标 IK 一次收敛（‖r‖ ~ 1e-7 mm）；world-rooted 交叉验证
 > 两分支互差 2.3e-12；约束 Jacobian 零位 = I₆（rank 6、cond 1.0）。
@@ -533,7 +533,7 @@ flowchart LR
 > 唯一 `execution-config.yaml`）；KNOWNVALUES 与方形 6×6 基线覆盖迁移为上述测试的 tmp
 > fixture（复跑全绿：rank 6、cond 1.0、J ≡ I₆；8 未知量系统 rank 8/8）。
 
-**目标**：在 `m-rex-3t1r` 上跑通 M-REx 主构型的闭环约束生成与 IK 求解。这是 PathPlanner 集成（A.7.1）的前置步骤。
+**目标**：在 `mrex-3t1r_001` 上跑通 M-REx 主构型的闭环约束生成与 IK 求解。这是 PathPlanner 集成（A.7.1）的前置步骤。
 
 **核心难点**：L3 世界系闭环的 FK 方向与当前 tool-rooted growth 相反。当前 FK 从工具端向外传播到 Manipulator ground frame。但 L3 约束需要以 world 为参考系、以 Manipulator 关节为未知量。
 
@@ -545,7 +545,7 @@ flowchart LR
 
 **具体任务**：
 
-1. **编写 `m-rex-3t1r/execution-config.yaml`**（新建）
+1. **编写 `mrex-3t1r_001/execution-config.yaml`**（新建）
    - `mode: closed_loop`
    - `closure_cuts`：显式声明每条 Manipulator 的 ground frame 作为一个切口对——`near` = ground frame 在 FK 中的位姿（`<manipulator>.ground`），`far` = 对应的 world binding 标定位姿。或声明机构本体上某一点的位姿一致性约束
    - `world_binding`：每条 Manipulator ground → world 的标定变换（由零位构型 FK 预计算）
@@ -578,7 +578,7 @@ flowchart LR
 
 | 文件 | 内容 |
 |------|------|
-| `specs/dsl/cases/m-rex-3t1r/execution-config.yaml` | L3 闭环执行配置（新建；6 未知量 3T 基线版，2026-10-11 配置合并后移除、覆盖迁移至测试 fixture） |
+| `specs/dsl/cases/mrex-3t1r_001/execution-config.yaml` | L3 闭环执行配置（新建；6 未知量 3T 基线版，2026-10-11 配置合并后移除、覆盖迁移至测试 fixture） |
 | `+solver/ClosureSolver.m` | 扩展支持 L3 模式（与 A.4a 同一文件） |
 | `tests/pipeline/test_closure_solver_m_rex_3t1r.m` | 零位验证 + IK 求解验证 |
 
@@ -600,7 +600,7 @@ flowchart LR
 
 **目标**：在 A.2.5 静态装配可视化的基础上，增加动态动画能力——给定关节轨迹（时间序列的关节值），逐帧更新机构位形并渲染。这是「求解结果可观测」的核心手段，也直接服务于后续 PathPlanner 集成时的实时状态显示需求。
 
-> **状态（2026-10-10）**：✅ 已完成（验证对象切换为 `m-rex-3t1r`，按「最低限度增量」实施）。
+> **状态（2026-10-10）**：✅ 已完成（验证对象切换为 `mrex-3t1r_001`，按「最低限度增量」实施）。
 > - **world-anchored 渲染**（`viz.animate(..., 'Anchor', 'world')`）：把 tool-rooted FK 位姿经
 >   $E(q)=T_{\text{bind}}\cdot T_{\text{tip}\leftarrow g_{\text{ref}}}^{-1}(q)$ 共轭到世界系——
 >   两台 Manipulator 的 ground frame 静止于标定位姿（零位 FK 标定，与 `ClosureSolver` 一致），
@@ -645,14 +645,14 @@ flowchart LR
 |------|------|
 | `scripts/matlab/+viz/animate.m` | 机构动画主函数：关节轨迹 → 逐帧 FK → 渲染循环（支持 `'Anchor','world'` + tip trail） |
 | `tests/pipeline/test_animation_single_closed_loop.m` | 对 single-closed-loop 的 IK 求解结果做动画验证（既有样例，保留） |
-| `tests/pipeline/test_animation_m_rex_3t1r.m` | 对 m-rex-3t1r 闭式 demo 轨迹做 world-anchored 动画验证（A.5.1 主验证，5 项检查全绿） |
-| `specs/dsl/cases/m-rex-3t1r/execution-config.yaml`（原 `execution-config-3t1r.yaml`） | 3T1R 全任务空间执行配置（unknown = 6 manip + 2 内部关节；components 全 12 分量；配置合并后为案例唯一配置） |
+| `tests/pipeline/test_animation_m_rex_3t1r.m` | 对 mrex-3t1r_001 闭式 demo 轨迹做 world-anchored 动画验证（A.5.1 主验证，5 项检查全绿） |
+| `specs/dsl/cases/mrex-3t1r_001/execution-config.yaml`（原 `execution-config-3t1r.yaml`） | 3T1R 全任务空间执行配置（unknown = 6 manip + 2 内部关节；components 全 12 分量；配置合并后为案例唯一配置） |
 
 **过关标准**：
 - 对 single-closed-loop 的 fmincon IK 求解结果，动画中末端 frame 从初值位姿连续运动到目标位姿，最终残差向量 → 0
 - 动画帧率 ≥ 10 fps（MATLAB figure 模式下）
 
-> **对象切换说明**：A.5.1 的实际验证对象定为 `m-rex-3t1r`——「对 IK 求解结果做动画」落地为
+> **对象切换说明**：A.5.1 的实际验证对象定为 `mrex-3t1r_001`——「对 IK 求解结果做动画」落地为
 > 「对闭式 demo 轨迹做 world-anchored 动画」（无需 IK）；single-closed-loop 动画保留为既有样例。
 > 达标情况：全帧闭环残差 ~1e-14（远优于「→ 0」要求）；评估管线实测 ~4 ms/帧（`evaluateNumericDirect`，60 点 tip 路径预计算 ~0.2 s），完整重绘帧率的交互式确认未纳入自动断言。
 
@@ -662,7 +662,7 @@ flowchart LR
 
 > **状态（2026-10-14）**：✅ 已完成。`execution-config` 新增可选 `tool_frame` 块，声明后
 > 「世界系 ≡ 工具坐标系零位姿态」，全部用户面目标位姿/位姿报告改以工具坐标系表达。
-> m-rex-3t1r 案例配置已默认声明该块（`rpy: [0, 45deg, 0]`，作为倾斜参考用法）。
+> mrex-3t1r_001 案例配置已默认声明该块（`rpy: [0, 45deg, 0]`，作为倾斜参考用法）。
 
 **动机**：`endFrame`（如 `pipette.tip_origin`）是绑定在工具上的物理参考帧；若零位构型下
 工具姿态相对观察者不平行（如 pipette 初始倾斜 −45°），直接以 endFrame 表达任务目标不直观
@@ -772,7 +772,7 @@ flowchart LR
 | `tests/pipeline/test_solver_robustness.m` | 多初值 + 边界约束 + 失败分类测试 |
 
 **过关标准**：
-- 同一 API 调用可处理 open-chain-2r（FK）、single-closed-loop（IK）、m-rex-3t1r（IK）
+- 同一 API 调用可处理 open-chain-2r（FK）、single-closed-loop（IK）、mrex-3t1r_001（IK）
 - 随机多起点求解成功率 ≥ 80%（对于工作空间内的目标位姿）
 - 失败时输出可操作的诊断信息（而非裸 exitflag）
 
@@ -814,7 +814,7 @@ flowchart LR
 
 4. **`constrained_components` 建议**
    - 基于 DOF 分析和 Jacobian 秩，自动建议每个切口的约束分量子集
-   - 例：对 m-rex-3t1r（2 个 Manipulator，12 个原始分量，4 个外部 DOF），建议仅约束 `[tx, ty, tz]` 或 `[tx, ty, tz, ry]`
+   - 例：对 mrex-3t1r_001（2 个 Manipulator，12 个原始分量，4 个外部 DOF），建议仅约束 `[tx, ty, tz]` 或 `[tx, ty, tz, ry]`
 
 **产出**：
 
@@ -825,7 +825,7 @@ flowchart LR
 
 **过关标准**：
 - `single-closed-loop` 的 DOF = 1（4 杆机构 1 个自由度），与手工计算一致
-- `m-rex-3t1r` 的 DOF = 4（3T1R），冗余约束被正确检测
+- `mrex-3t1r_001` 的 DOF = 4（3T1R），冗余约束被正确检测
 - `open-chain-2r` 的 DOF = 2（两转动关节串联），Jacobian 满秩
 
 ---
@@ -836,9 +836,9 @@ flowchart LR
 
 **目标**：把「符号工厂（编译器） → 自包含模型包 → 运行引擎（消费端）」拆成三段清晰边界（规划与产物规范见 `scripts/matlab/MODEL_EXPORT.md`）。导出器把 DSL 案例一键编译为**就地模型包**（`specs/dsl/cases/<case>/generated/`）：残差 / 解析雅可比 / 任务系 FK / 全体 frame FK 的独立数值 `.m` 内核 + `kinematic_metadata.json` 契约 + README；内核仅依赖 base MATLAB（无需 Symbolic Toolbox / 不依赖本仓库）。
 
-**E1 实测（m-rex-3t1r / single-closed-loop / open-chain-2r，MATLAB R2026a 无头）**：
+**E1 实测（mrex-3t1r_001 / single-closed-loop / open-chain-2r，MATLAB R2026a 无头）**：
 
-- 导出耗时随符号展开规模变化（m-rex-3t1r ~2.8 s、open-chain-2r ~1.6 s、single-closed-loop ~23 s）；生成内核与 `ClosureSolver` / `Expander` 数值一致（偏差 ≤ 8e-15，m-rex 共 96 frames / 8 输入 / 12 残差分量）；
+- 导出耗时随符号展开规模变化（mrex-3t1r_001 ~2.8 s、open-chain-2r ~1.6 s、single-closed-loop ~23 s）；生成内核与 `ClosureSolver` / `Expander` 数值一致（偏差 ≤ 8e-15，m-rex 共 96 frames / 8 输入 / 12 残差分量）；
 - 导出暴露并修复两个符号展开根因：关节符号 `real` 假设（`Expander`）、切口残差闭式 SE(3) 逆（`ClosureSolver`，替代 `T_near \ T_far` 的行列式展开）——解析雅可比由 4 个 NaN 变为全有限，残差内核提速 ~8.6×（507 → 59 µs）；
 - 既有 9 个 pipeline 测试零回归 + 新增 3 个导出测试（`tests/pipeline/test_export_kinematics_*.m`）全绿。
 
@@ -850,7 +850,7 @@ flowchart LR
 | `specs/dsl/cases/<case>/generated/*` | 就地模型包（gitignored 生成物） |
 | `tests/pipeline/test_export_kinematics_{m_rex_3t1r,single_closed_loop,open_chain_2r}.m` | 三案例导出契约测试 |
 
-**E1 v0.2（2026-10-15）：泛化任务空间元数据** —— 导出器新增 `solver.TaskSpaceAnalyzer` 瞬时分析（纯数值，零位探针）：元数据新增 `inputs.types / inputs.axes`（任务系轴标签；m-rex-3t1r → `[x y z x y z r1 r1]`）与 `task_space {mobility, rotation {mode, axis}, dims, probe}`（m-rex-3t1r → `3t1r`，旋转轴 $[1\,0\,1]/\sqrt2$，流形 4 维）。关键校核：流形分析须用 ground-ground 相对约束——world 切口导出残差为「双 ground 钉零位」过定形式（12 分量对 8 未知量，Jacobian 满列秩 8），不可用于机动度分析。下游 `mrex_generative` 的 `mrex.ConfigGenerator` 据此自动派生扫描轴向 / 旋转轴与类型-轴向限位规则（policy `families` 降级为后备 / `"override": true` 显式覆盖）——**dsl → IK/FK 模型导出 → 工作空间评估全链路打通**（2026-10-15 端到端实测：`generate_configs` → `evaluate_workspace`；m-rex-3t1r 14641 点 / 437 可行 / 13.1 s）。三案例导出测试断言扩展后全绿；mrex_generative `run_all` 新增 task_space 主路径与 legacy 回退（名字通配限位 + 家族后备）两条测试全绿。
+**E1 v0.2（2026-10-15）：泛化任务空间元数据** —— 导出器新增 `solver.TaskSpaceAnalyzer` 瞬时分析（纯数值，零位探针）：元数据新增 `inputs.types / inputs.axes`（任务系轴标签；mrex-3t1r_001 → `[x y z x y z r1 r1]`）与 `task_space {mobility, rotation {mode, axis}, dims, probe}`（mrex-3t1r_001 → `3t1r`，旋转轴 $[1\,0\,1]/\sqrt2$，流形 4 维）。关键校核：流形分析须用 ground-ground 相对约束——world 切口导出残差为「双 ground 钉零位」过定形式（12 分量对 8 未知量，Jacobian 满列秩 8），不可用于机动度分析。下游 `mrex_generative` 的 `mrex.ConfigGenerator` 据此自动派生扫描轴向 / 旋转轴与类型-轴向限位规则（policy `families` 降级为后备 / `"override": true` 显式覆盖）——**dsl → IK/FK 模型导出 → 工作空间评估全链路打通**（2026-10-15 端到端实测：`generate_configs` → `evaluate_workspace`；mrex-3t1r_001 14641 点 / 437 可行 / 13.1 s）。三案例导出测试断言扩展后全绿；mrex_generative `run_all` 新增 task_space 主路径与 legacy 回退（名字通配限位 + 家族后备）两条测试全绿。
 
 **后续（详见 ARCHITECTURE.md E2–E4）**：最小运行引擎（GN/LM + warm-start）、PathPlanner / Generative 消费端集成、C-MEX 与 JSON 计算图介质扩展。
 
@@ -869,7 +869,7 @@ flowchart LR
 3. ✅ 含一个转动副的开环链：验证关节变量注册和 FK 输出。
 4. ✅ **L2 内部闭环机构**（`single-closed-loop` 平行四边形 4 杆）：对应 A.4a。验证 `closed: true` 标记的切口生成、残差公式、fmincon IK 求解，以及 FK→IK 往返交叉验证。
 5. ⬜ 三支链并联雏形（L2 闭环）：验证多支链 FK 传播与多切口约束构造。（可选——如 A.4a 验证充分可跳过）
-6. ✅ **M-REx 世界系闭环**（`m-rex-3t1r`，L3 闭环，主导目标）：对应 A.4b，完成于 2026-10-10（`tests/pipeline/test_closure_solver_m_rex_3t1r.m` 全绿）。机构本体为开环链，末端效应器在零位与世界原点重合（$T=I_4$），两台 `Manipulator` 的 `ground` frame 通过各自的静态标定偏移绑定到同一 `world` 参考系。验证 L3 `closure_cuts` 切口生成、外部驱动变量指派、以及 IK 求解。这是 PathPlanner 集成验证（A.7.1）的前置步骤。
+6. ✅ **M-REx 世界系闭环**（`mrex-3t1r_001`，L3 闭环，主导目标）：对应 A.4b，完成于 2026-10-10（`tests/pipeline/test_closure_solver_m_rex_3t1r.m` 全绿）。机构本体为开环链，末端效应器在零位与世界原点重合（$T=I_4$），两台 `Manipulator` 的 `ground` frame 通过各自的静态标定偏移绑定到同一 `world` 参考系。验证 L3 `closure_cuts` 切口生成、外部驱动变量指派、以及 IK 求解。这是 PathPlanner 集成验证（A.7.1）的前置步骤。
 
 每个样例都应至少输出：
 

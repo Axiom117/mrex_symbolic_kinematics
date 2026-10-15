@@ -2,7 +2,7 @@
 # 3T1R M-REx 机构 — 详细文档见同目录 README.md
 
 dsl_version: 0
-mechanism: m_rex_3t1r
+mechanism: mrex_3t1r_001
 description: 3T1R M-REx 机构——两端 Manipulator 驱动的笛卡尔闭环链，中间经 Pin 连接件串联 Frame 立方体与 revolute Joint，ToolPipette 工具末端从 Frame_4 分支，右端经 Frame_6 双面分叉闭合。
 module_library: ../../../modules/
 

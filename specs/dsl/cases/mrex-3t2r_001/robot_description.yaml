@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=../../schema/mechanism-assembly.schema.yaml
+# 3T2R M-REx 机构 — 详细文档见同目录 README.md
+
+dsl_version: 0
+mechanism: mrex_3t2r_001
+description: 3T2R M-REx 机构——两端 Manipulator 驱动的笛卡尔闭环链，中间经 Pin 连接件串联 Frame 立方体与 revolute Joint，ToolPipette 工具末端从 Frame_4 分支，右端经 Frame_6 双面分叉闭合。
+module_library: ../../../modules/
+description_long: 3T2R M-REx 机构——两端 Manipulator 驱动的笛卡尔闭环链，中间经 Pin 连接件串联 Frame 立方体与 revolute Joint，ToolPipette 工具末端从 Frame_4 分支，右端经 Frame_6 双面分叉闭合。
+instances:
+  manipulator_L:
+    type: Manipulator
+  adaptor_L:
+    type: Adaptor
+  frame_1:
+    type: Frame
+  connector_1:
+    type: Pin
+  frame_2:
+    type: Frame
+  joint_1:
+    type: Joint
+  frame_3:
+    type: Frame
+  connector_2:
+    type: Pin
+  frame_4:
+    type: Frame
+  pipette:
+    type: ToolPipette
+  connector_3:
+    type: Pin
+  frame_5:
+    type: Frame
+  joint_2:
+    type: Joint
+  frame_6:
+    type: Frame
+  connector_4:
+    type: Pin
+  frame_7:
+    type: Frame
+  adaptor_R:
+    type: Adaptor
+  manipulator_R:
+    type: Manipulator
+
+connections:
+  # --- 左侧驱动：Manipulator_L → Adaptor_L → Frame_1 ---
+  - ports: [manipulator_L.dock, adaptor_L.attachment_point]
+  - ports: [adaptor_L.pin_connector_A, frame_1.faceXMinus]
+  # --- Frame_1 → Connector_1(Pin) → Frame_2 ---
+  - ports: [frame_1.faceYPlus, connector_1.sideA]
+  - ports: [connector_1.sideB, frame_2.faceYMinus]
+  # --- Frame_2 → Joint_1 → Frame_3 ---
+  - ports: [frame_2.faceYPlus, joint_1.linkA]
+  - ports: [joint_1.linkB, frame_3.faceYMinus]
+  # --- Frame_3 → Connector_2(Pin) → Frame_4 ---
+  - ports: [frame_3.faceYPlus, connector_2.sideA]
+  - ports: [connector_2.sideB, frame_4.faceYMinus]
+  # --- Frame_4 → ToolPipette（工具末端分支，ToolPipette 仅有 connector_side 一个 exposed 端口）---
+  - ports: [frame_4.faceXPlus, pipette.connector_side]
+  # --- Frame_4 → Connector_3(Pin) → Frame_5 ---
+  - ports: [frame_4.faceYPlus, connector_3.sideA]
+  - ports: [connector_3.sideB, frame_5.faceYMinus]
+  # --- Frame_5 → Joint_2 → Frame_6 --- （主运动链延续，从 Frame_4 另一面出发）
+  - ports: [frame_5.faceYPlus, joint_2.linkA]
+  - ports: [joint_2.linkB, frame_6.faceYMinus]
+  # --- Frame_6 → Connector_4(Pin) → Frame_7 ---
+  - ports: [frame_6.faceYPlus, connector_4.sideA]
+  - ports: [connector_4.sideB, frame_7.faceYMinus]
+  # --- Frame_7 → Adaptor_R → Manipulator_R ---
+  - ports: [frame_7.faceXMinus, adaptor_R.pin_connector_B]
+  - ports: [adaptor_R.attachment_point, manipulator_R.dock]

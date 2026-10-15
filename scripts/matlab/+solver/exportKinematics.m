@@ -64,9 +64,9 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
 %
 %   Example:
 %     out = solver.exportKinematics( ...
-%         'specs/dsl/cases/m-rex-3t1r/robot_description.yaml', ...
-%         'specs/dsl/cases/m-rex-3t1r/execution-config.yaml');
-%     % -> writes specs/dsl/cases/m-rex-3t1r/generated/{README.md, ...}
+%         'specs/dsl/cases/mrex-3t1r_001/robot_description.yaml', ...
+%         'specs/dsl/cases/mrex-3t1r_001/execution-config.yaml');
+%     % -> writes specs/dsl/cases/mrex-3t1r_001/generated/{README.md, ...}
 %
 %   See also: +solver/ClosureSolver, +ir/Expander, +ir/ExecutionConfig
 

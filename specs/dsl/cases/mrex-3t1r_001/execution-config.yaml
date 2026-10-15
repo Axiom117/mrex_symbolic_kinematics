@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=../../../schema/execution-config.schema.yaml
-# m-rex-3t1r 执行配置 — 3T1R 全任务空间模式（案例唯一配置）
+# mrex-3t1r_001 执行配置 — 3T1R 全任务空间模式（案例唯一配置）
 #
 # 两个内部转动关节 joint_1.q / joint_2.q 移入 unknown，形成 8 未知量 / 12 分量的
 # 完整闭环系统；释放内部关节后机构获得完整 3T1R 能力（tip 任务子空间 =

@@ -1,6 +1,6 @@
 function test_tool_frame_m_rex_3t1r()
 %TEST_TOOL_FRAME_M_REX_3T1R  L3 tool-frame (world-aligned task frame) checks.
-%   Builds the m-rex-3t1r pipeline and verifies the tool_frame feature
+%   Builds the mrex-3t1r_001 pipeline and verifies the tool_frame feature
 %   (L3 execution layer, 2026-10-14).  The case config now declares the
 %   tilted reference (rpy [0, "45deg", 0] → U = Ry(45°), world ≡ tool-frame
 %   zero pose, tip initial attitude −45° in world):
@@ -33,9 +33,9 @@ function test_tool_frame_m_rex_3t1r()
     rootDir = fileparts(fileparts(fileparts(mfilename('fullpath'))));
     addpath(genpath(fullfile(rootDir, 'scripts', 'matlab')));
 
-    dslFile  = fullfile(rootDir, 'specs', 'dsl', 'cases', 'm-rex-3t1r', ...
+    dslFile  = fullfile(rootDir, 'specs', 'dsl', 'cases', 'mrex-3t1r_001', ...
         'robot_description.yaml');
-    execFile = fullfile(rootDir, 'specs', 'dsl', 'cases', 'm-rex-3t1r', ...
+    execFile = fullfile(rootDir, 'specs', 'dsl', 'cases', 'mrex-3t1r_001', ...
         'execution-config.yaml');
 
     tmpDir = tempname(); mkdir(tmpDir);

@@ -1,6 +1,6 @@
 function test_closure_solver_m_rex_3t1r()
-%TEST_CLOSURE_SOLVER_M_REX_3T1R  L3 world-closed-loop solver test (m-rex-3t1r).
-%   Builds the real m-rex-3t1r symbolic pipeline and verifies the L3
+%TEST_CLOSURE_SOLVER_M_REX_3T1R  L3 world-closed-loop solver test (mrex-3t1r_001).
+%   Builds the real mrex-3t1r_001 symbolic pipeline and verifies the L3
 %   world-anchored support of solver.ClosureSolver.  Operates on the 3T1R
 %   operational config (8 unknowns = 6 manipulator + 2 internal joints, all
 %   12 residual components); the former 3T baseline partition is exercised
@@ -34,9 +34,9 @@ function test_closure_solver_m_rex_3t1r()
     rootDir = fileparts(fileparts(fileparts(mfilename('fullpath'))));
     addpath(genpath(fullfile(rootDir, 'scripts', 'matlab')));
 
-    dslFile  = fullfile(rootDir, 'specs', 'dsl', 'cases', 'm-rex-3t1r', ...
+    dslFile  = fullfile(rootDir, 'specs', 'dsl', 'cases', 'mrex-3t1r_001', ...
         'robot_description.yaml');
-    execFile = fullfile(rootDir, 'specs', 'dsl', 'cases', 'm-rex-3t1r', ...
+    execFile = fullfile(rootDir, 'specs', 'dsl', 'cases', 'mrex-3t1r_001', ...
         'execution-config.yaml');
 
     tmpDir = tempname(); mkdir(tmpDir);
@@ -394,7 +394,7 @@ function writeExplicitConfig(outPath, baseText, groundRef, T)
 end
 
 function yml = localBaselineFixtureYaml()
-%LOCALBASELINEFIXTUREYAML  Former m-rex-3t1r execution-config.yaml (A.4b).
+%LOCALBASELINEFIXTUREYAML  Former mrex-3t1r_001 execution-config.yaml (A.4b).
 %   Reference partition of the 3T baseline: internal joints known (default 0,
 %   KNOWNVALUES-overridable) and components [tx,ty,tz] per cut.  Written to a
 %   tmp file so KNOWNVALUES and the square 6x6 baseline stay covered while

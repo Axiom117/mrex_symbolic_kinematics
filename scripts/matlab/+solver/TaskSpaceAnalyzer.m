@@ -8,7 +8,7 @@ classdef TaskSpaceAnalyzer
 %     mobility  —— "NtMr"：任务旋量空间 S ⊆ se(3) 的一阶分解，t = 纯平动
 %                  子空间维数（{ (0, v) ∈ S }），r = 角速度投影的秩（旋转自由度
 %                  数；r ≤ 1 时角速度投影恰为一条直线 → 固定旋转轴）。
-%                  例：m-rex-3t1r → "3t1r"（3 平移 ⊕ 1 旋转）。
+%                  例：mrex-3t1r_001 → "3t1r"（3 平移 ⊕ 1 旋转）。
 %     rotation  —— {mode: 'none' | 'axis' | 'full'}；mode = 'axis' 时给出
 %                  单位向量 axis（任务/工具系、"D 恒等"帧——即 fk_tool 在零位
 %                  所处帧；与 WorkspaceEvaluator.pose2T 的 phi 轴向同约定）。
@@ -35,7 +35,7 @@ classdef TaskSpaceAnalyzer
 %                  - 其余平行方向按出现次序聚类 → 'u1', 'u2', …（棱柱）、
 %                    'r1', 'r2', …（旋转）；同一方向（含反向）同标签；
 %                  - 无可判定方向（probe.axesRoot 缺失/零向量）→ ''。
-%                  例：m-rex-3t1r → ["x" "y" "z" "x" "y" "z" "r1" "r1"]。
+%                  例：mrex-3t1r_001 → ["x" "y" "z" "x" "y" "z" "r1" "r1"]。
 %
 %   PROBE 结构（由 exportKinematics 组装）字段：
 %     .names          cellstr, n×1 — 输入名（次序 = q 次序；仅信息用）
@@ -49,7 +49,7 @@ classdef TaskSpaceAnalyzer
 %     .probeQ         n×1 double | [] — 探针位形（缺省全零，即零位）
 %     .relTol         double | [] — 秩相对容差（缺省 1e-6）
 %
-%   注：m-rex-3t1r 的实测标定（2026-10-15，MATLAB R2026a）：物理环约束
+%   注：mrex-3t1r_001 的实测标定（2026-10-15，MATLAB R2026a）：物理环约束
 %   rank = 4（流形 4 维；导出残差 closure_residual 的 12 分量 Jacobian 满列秩
 %   8 是"双 ground 钉零位"的过定形式，不能用于流形分析）；S 4 维、r = 1、
 %   轴 = [1 0 1]/√2（任务系）、t = 3；零位与已解可行点结果一致。

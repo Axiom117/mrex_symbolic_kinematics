@@ -21,7 +21,7 @@ function seq = buildPoseSequence(expander, jointTrajectory, varNames, varargin)
 %                'world' — re-express every pose in the internal world frame
 %                  (world ≡ tip zero pose) via
 %                  E(q) = T_bind * inv(T_root<-ground_ref(q)), so L3
-%                  world-closed-loop mechanisms (m-rex-3t1r) keep their
+%                  world-closed-loop mechanisms (mrex-3t1r_001) keep their
 %                  ground frames fixed at the calibrated world bindings
 %                  while the tool visibly travels.  T_bind is the zero-pose
 %                  FK pose of each ground frame — the same auto-calibration

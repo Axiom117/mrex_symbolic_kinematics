@@ -1,6 +1,6 @@
 function test_export_kinematics_m_rex_3t1r()
-%TEST_EXPORT_KINEMATICS_M_REX_3T1R  Model-package export test (m-rex-3t1r).
-%   Runs solver.exportKinematics on the m-rex-3t1r case (closed_loop, L3
+%TEST_EXPORT_KINEMATICS_M_REX_3T1R  Model-package export test (mrex-3t1r_001).
+%   Runs solver.exportKinematics on the mrex-3t1r_001 case (closed_loop, L3
 %   world-anchored cuts, tool_frame declared) and verifies the exported
 %   self-contained package against the live solver pipeline:
 %     [1] package written to <case>/generated (default OutputDir)
@@ -13,7 +13,7 @@ function test_export_kinematics_m_rex_3t1r()
 %     [8] task-space metadata: inputs.types/axes + task_space (mobility 3t1r,
 %         rotation axis [1,0,1]/√2, probe ranks) — the generic downstream contract
 %
-%   Writes (regenerated on every run): specs/dsl/cases/m-rex-3t1r/generated/
+%   Writes (regenerated on every run): specs/dsl/cases/mrex-3t1r_001/generated/
 %   (gitignored generated artifacts).
 %
 %   Requires: Symbolic Math Toolbox
@@ -25,7 +25,7 @@ function test_export_kinematics_m_rex_3t1r()
     rootDir = fileparts(fileparts(fileparts(mfilename('fullpath'))));
     addpath(genpath(fullfile(rootDir, 'scripts', 'matlab')));
 
-    caseDir = fullfile(rootDir, 'specs', 'dsl', 'cases', 'm-rex-3t1r');
+    caseDir = fullfile(rootDir, 'specs', 'dsl', 'cases', 'mrex-3t1r_001');
     dslFile = fullfile(caseDir, 'robot_description.yaml');
     execFile = fullfile(caseDir, 'execution-config.yaml');
     exportedDir = fullfile(caseDir, 'generated');

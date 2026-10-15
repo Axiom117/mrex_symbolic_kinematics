@@ -466,10 +466,10 @@ viz.play(seq, scene, 'Fps', 15);
 #### 使用示例
 
 ```matlab
-% 就地导出（写入 specs/dsl/cases/m-rex-3t1r/generated/）
+% 就地导出（写入 specs/dsl/cases/mrex-3t1r_001/generated/）
 out = solver.exportKinematics( ...
-    'specs/dsl/cases/m-rex-3t1r/robot_description.yaml', ...
-    'specs/dsl/cases/m-rex-3t1r/execution-config.yaml');
+    'specs/dsl/cases/mrex-3t1r_001/robot_description.yaml', ...
+    'specs/dsl/cases/mrex-3t1r_001/execution-config.yaml');
 
 % 消费端（无需 Symbolic Toolbox）
 addpath(out.OutputDir);
@@ -646,7 +646,7 @@ disp(r.frames.linkB);  % 4×4 double 位姿
 
 | 选项 | 取值 | 说明 |
 |------|------|------|
-| `'Anchor'` | `'root'`（默认）或 `'world'` | 显示参照系。`'world'` 把 tool-rooted FK 位姿经 $E(q)=T_{\text{bind}}\cdot T_{\text{tip}\leftarrow g_{\text{ref}}}^{-1}(q)$ 共轭到世界系，使 L3 世界系闭环机构（如 m-rex-3t1r）的两台 Manipulator ground frame 静止于标定位姿、工具端真实移动。要求机构存在 `semantic_tag: 'ground'` 的 frame；$T_{\text{bind}}$ 取零位 FK（与 `solver.ClosureSolver` 自动标定一致）；多余 ground frame 打印分支一致性诊断 |
+| `'Anchor'` | `'root'`（默认）或 `'world'` | 显示参照系。`'world'` 把 tool-rooted FK 位姿经 $E(q)=T_{\text{bind}}\cdot T_{\text{tip}\leftarrow g_{\text{ref}}}^{-1}(q)$ 共轭到世界系，使 L3 世界系闭环机构（如 mrex-3t1r_001）的两台 Manipulator ground frame 静止于标定位姿、工具端真实移动。要求机构存在 `semantic_tag: 'ground'` 的 frame；$T_{\text{bind}}$ 取零位 FK（与 `solver.ClosureSolver` 自动标定一致）；多余 ground frame 打印分支一致性诊断 |
 | `'ShowTrail'` | `logical`，默认 `true` | 叠加 tip 世界轨迹：完整路径淡虚线 + 已走过段高亮 + 当前 tip 标记（仅 `'world'` 模式生效） |
 
 #### 性能优化（位于计算层与渲染层）
@@ -675,7 +675,7 @@ viz.animate('robot_description.yaml', Q, varNames, 15);
 ```
 
 ```matlab
-% world 锚定动画（L3 世界系闭环机构，如 m-rex-3t1r）：
+% world 锚定动画（L3 世界系闭环机构，如 mrex-3t1r_001）：
 % Q 由 tests/pipeline/test_animation_m_rex_3t1r.m 顶部参数区闭式构造生成
 viz.animate(dslFile, Q, varNames, 15, 'Anchor', 'world');
 ```

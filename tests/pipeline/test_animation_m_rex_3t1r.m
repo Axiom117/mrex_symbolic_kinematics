@@ -1,5 +1,5 @@
 function test_animation_m_rex_3t1r()
-%TEST_ANIMATION_M_REX_3T1R  Layered pipeline + tool-frame animation (m-rex-3t1r).
+%TEST_ANIMATION_M_REX_3T1R  Layered pipeline + tool-frame animation (mrex-3t1r_001).
 %   Demonstrates the current end-to-end flow (A.5.2.0) — the compute layer
 %   produces a controlled pose sequence (solver.buildPoseSequence), the render
 %   layer is a pure consumer (viz.sceneSpec + viz.play) — together with the
@@ -53,9 +53,9 @@ function test_animation_m_rex_3t1r()
     fprintf('Demo trajectory: phi -%d..+%d deg + XY circle r=%d mm, %d frames @ %d fps\n', ...
         phiMaxDeg, phiMaxDeg, RC, nFrames, fps);
 
-    dslFile  = fullfile(rootDir, 'specs', 'dsl', 'cases', 'm-rex-3t1r', ...
+    dslFile  = fullfile(rootDir, 'specs', 'dsl', 'cases', 'mrex-3t1r_001', ...
         'robot_description.yaml');
-    execFile = fullfile(rootDir, 'specs', 'dsl', 'cases', 'm-rex-3t1r', ...
+    execFile = fullfile(rootDir, 'specs', 'dsl', 'cases', 'mrex-3t1r_001', ...
         'execution-config.yaml');
 
     % ---- [1] symbolic pipeline + zero-pose bindings ----
