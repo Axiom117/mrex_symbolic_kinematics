@@ -2,7 +2,7 @@
 
 > 3T1R 主体构型 [mrex_3t1r_001](../mrex-3t1r_001/README.md) 的 **3T2R 变体**：主运动链串联四个内置
 > revolute 关节（joint_1…joint_4，零位轴向 Z-Y-Y-Z），由两端 Manipulator 笛卡尔驱动构成世界系闭环；
-> 零位任务空间实测 mobility `3t2r`（3 平移 ⊕ 2 转动，rotation full），见 [§ L3 执行层](#l3-执行层execution-config)。
+> 零位任务空间实测 mobility `3t2r`（3 平移 ⊕ 2 转动，rotation full），见 [§ L3 执行层](#l3-执行层execution-config) 与 [§ 动画](#动画tool-frame-球面滚动)。
 
 ## 结构概述
 
@@ -95,9 +95,34 @@ flowchart TD
 | tool_frame 解析（`ClosureSolver.ToolTransform`） | $U = Ry(45°)$ |
 | 模型导出（`solver.exportKinematics`） | 7.7 s；10 输入 / 102 frames / 12 分量（产物见 `generated/`，gitignored） |
 
-> 说明：IK 轨迹 / 动画等端到端验证尚未编写；可参照
-> `tests/pipeline/test_closure_solver_m_rex_3t1r.m` 与 `tests/pipeline/test_export_kinematics_m_rex_3t1r.m`
-> 的框架为本案例扩展。
+> 说明：IK 求解轨迹（fmincon 逐帧）尚未编写；动画端到端验证见下节
+> （`tests/pipeline/test_animation_m_rex_3t2r.m`，全绿）。
+
+## 动画（tool frame 球面滚动）
+
+分层播放（A.5.2.0 管线不变）：`solver.buildPoseSequence(e, Q, names, 'Anchor', 'tool', 'ToolTransform', U)`
+→ `viz.sceneSpec(e)` → `viz.play(seq, scene, 'Fps', 30)`；端到端测试：
+`tests/pipeline/test_animation_m_rex_3t2r.m`。
+
+**demo 轨迹（闭式构造，无 IK / 无 fmincon）**——tool frame 的姿态扫过精确的两参数旋转族
+（tip 轴向在单位球面上滚动，扫角 ≤ 25.8°），位置同时走小三维路径（覆盖 3 个平移自由度）：
+
+- **滚动（2R）**：$R_{tip}(t) = R_y(-q_1(t))\,R_x(q_2(t))$，$q_1 = 24°\sin(2\pi t)$、
+  $q_2 = 18°\sin(4\pi t)$（Lissajous——两转轴同步变化，tip 轴向在球面划出闭合曲线）；
+- **位置（3T）**：XY 平面圆（半径 5 mm）+ z 方向 ±2 mm 起伏；
+- **镜像闭合**：$q_3 = -q_2$、$q_4 = -q_1$——左右两支的旋转族 $R_y(a)R_x(b)$ 是同一集合；
+- **平移补偿**：$\mathbf{d}_{L/R} = R_{bind}^{\top}(\mathbf{p} - \mathbf{p}_{swing}^{L/R})$，
+  $R_{bind} = \mathrm{rot}(P_L) = \mathrm{rot}(P_R)$，$\mathbf{p}_{swing}^{L/R}$ 由编译位姿函数求值。
+
+实测（`test_animation_m_rex_3t2r.m`，MATLAB R2026a 无头）：
+
+| 检查项 | 结果 |
+|------|------|
+| 旋转族精确性（$R_{tip}$ vs 左支 FK，60 帧） | max dev = 3.3e-16 |
+| Manipulator 行程 | \|dx\|≤14.3、\|dy\|≤14.9、\|dz\|≤18.3 mm（≤ 20/20/30） |
+| ClosureSolver 残差（采样 5 帧，全 12 分量） | max \|r\| = 3.5e-14（无 NaN） |
+| tool-world 序列契约（tip / trail / grounds） | max dev ≤ 2.6e-14；分支 gap 2.2e-14 |
+| evalToolPose vs $U^{-1} \cdot D_k \cdot U$ | dev = 1.9e-14 |
 
 ## 说明
 

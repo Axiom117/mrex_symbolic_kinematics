@@ -73,7 +73,7 @@
 
 关键区分：外部驱动器的框架偏移是**配置时静态标定**的几何量，而非要求驱动器在运行时输出额外补偿位移来拼合闭环。运行期间，驱动器仅输出相对于该标定零位的增量运动。
 
-该外部驱动器由 `Manipulator` 关节模块物化（见 §5.6）：其 XYZ 三轴平移由内部三个 `prismatic` 关节（变量 `dx`/`dy`/`dz`）串联组合而成，等价于一个 3-DOF 笛卡尔关节。机构侧以 `socket` 端口 `dock` 对接 `Adaptor.mount_point`（`plug`），世界侧以 `ground` frame（无 `polarity`）由执行层绑定到 `world`；上文的静态零位偏移即写入 `Manipulator` 的接地配置。`Manipulator` 是 L1 模块，但物化了 L3 外部驱动：其关节在闭环构型下作为待求未知量，在开环构型下作为 `actuated` 输入（见下）。
+该外部驱动器由 `Manipulator` 关节模块物化（见 §5.6）：其 XYZ 三轴平移由内部三个 `prismatic` 关节（变量 `dx`/`dy`/`dz`）串联组合而成，等价于一个 3-DOF 笛卡尔关节。机构侧以 `socket` 端口 `dock` 对接 `Adaptor.attachment_point`（`plug`），世界侧以 `ground` frame（无 `polarity`）由执行层绑定到 `world`；上文的静态零位偏移即写入 `Manipulator` 的接地配置。`Manipulator` 是 L1 模块，但物化了 L3 外部驱动：其关节在闭环构型下作为待求未知量，在开环构型下作为 `actuated` 输入（见下）。
 
 > **L2 内部闭环 vs L3 世界系闭环**：上述 M-REx 主构型属于 **L3 世界系闭环**——回路因多个 `ground` frame
 > 各带静态标定偏移绑定到同一 `world` 参考系而形成，DSL 中机构本体为开环链（不写 `closed: true`），切口由 L3 `closure_cuts`
@@ -198,7 +198,7 @@ DSL 源码与解释器 IR 中，元件类型名与模块类型名遵循不同的
 **关键规则**（详见各 YAML）：
 - `Frame` 六面端口的 `+Z` 统一朝外（外法向），`+X` 为面内零 roll 参考（§9.4）。
 - `Joint` 内部拓扑：`linkA ←fixed— bodyA —[revolute(q)]— bodyB —fixed→ linkB`。
-- `Manipulator` 内部拓扑：`ground ←fixed— base —[prismatic dx]— stageX —[prismatic dy]— stageY —[prismatic dz]— carriage —fixed→ dock`。零位（dx=dy=dz=0）为恒等变换。
+- `Manipulator` 内部拓扑：`ground ←fixed— base —[prismatic dx]— stageX —[prismatic dy]— stageY —[prismatic dz]— carriage —fixed→ dock`。零位（dx=dy=dz=0）时三个 prismatic 关节为恒等变换；端口固定变换见 `Manipulator.yaml`（dock 相对 carriage 含一次 180° 翻装，用于接地系朝向校正）。
 - 模块类几何参数（如 `Frame.cubeLength`、`ToolPipette.tipDistance`）取值见 `specs/modules/config/dimensions.yaml`。
 
 > → `conventions.yaml` `element_types.nodes.body` / `element_types.nodes.frame` / `element_types.edges.joint`

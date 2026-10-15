@@ -8,14 +8,15 @@
 #   1. 提供 3-DOF 笛卡尔平移驱动 —— 内部串联三个 1-DOF prismatic 关节（dx/dy/dz），
 #      沿 +X/+Y/+Z 依次驱动。无需引入 cartesian 关节类型（§3.4）。
 #   2. 把机构接地到世界系 —— world 侧暴露一个 ground frame（semantic_tag: ground，无 polarity），
-#      由 L3 执行层绑定到 world；机构侧暴露一个 socket 端口 dock，对接 Adaptor.mount_point(plug)。
+#      由 L3 执行层绑定到 world；机构侧暴露一个 socket 端口 dock，对接 Adaptor.attachment_point(plug)。
 #
 # 极性说明（§9.5）：Manipulator 是 Frame 之外第二个 socket 提供者。其 dock 为 socket，
-# 与 Adaptor.mount_point(plug) 构成合法 socket↔plug 连接。ground 为世界侧接地 frame，
+# 与 Adaptor.attachment_point(plug) 构成合法 socket↔plug 连接。ground 为世界侧接地 frame，
 # 不带 polarity、不作机械 mate，仅由 L3 绑定到 world。
 #
-# 零位约定：dx=dy=dz=0 时内部链为恒等变换（ground 与 dock 仅相差一次接地对齐/端口对齐，
-# 无平移），满足 §2.4 的初始零位条件——驱动器零位与机构零位重合。
+# 零位约定：dx=dy=dz=0 时三个 prismatic 关节为恒等变换（ground 与 dock 相对各自宿主
+# 仅相差固定端口对齐——dock 侧含一次 180° 翻装，无平移），满足 §2.4 的初始零位条件——
+# 驱动器零位与机构零位重合。
 #
 # 执行构型（L3 指派，模块本身不写）：
 #   闭环（M-REx 主构型）：dx/dy/dz 作为 external driver 未知量，由闭环残差求解。
@@ -40,13 +41,15 @@ bodies:
 
 # --- 端口框架表 ---
 # ground：world 侧接地 frame（exposed，无 polarity，由 L3 绑定 world，非机械 mate）。
-# dock  ：机构侧 socket 端口，对接 Adaptor.mount_point(plug)。
+# dock  ：机构侧 socket 端口，对接 Adaptor.attachment_point(plug)。
 frames:
   - { name: ground, host: base, exposed: true, semantic_tag: ground, observable: true }
   - { name: dock, host: carriage, exposed: true, semantic_tag: connector, polarity: socket, observable: true }
 
 # --- 内部运动学图 · 固定变换（body 中心 frame → 各端口）---
-# 均为零平移；ground 与世界轴对齐（恒等），dock 令 socket +Z 沿 carriage +Z 朝外。
+# 均为零平移；ground 相对 base 为恒等；dock 相对 carriage 绕本地 +X 翻装 180°（+Z→-Z）——
+# 与冻结 mate 规则（plug = socket·Rz·Rx(π)，见 connection-semantics.md §2.1）合成后，在
+# 本机构装配（dock 对接 Adaptor.attachment_point）下 ground/dock 零位与世界轴对齐（恒等）。
 fixed_transforms:
   - from_frame: base
     to_frame: ground
@@ -55,7 +58,7 @@ fixed_transforms:
   - from_frame: carriage
     to_frame: dock
     translation: [0, 0, 0]
-    rotation: { align: { a: ["+Z", "+Z"], b: ["+X", "+X"] } }
+    rotation: { align: { a: ["+Z", "-Z"], b: ["+X", "+X"] } }
 
 # --- 内部运动学图 · 关节（三个 1-DOF prismatic 串联 = 笛卡尔 3-DOF）---
 joints:
