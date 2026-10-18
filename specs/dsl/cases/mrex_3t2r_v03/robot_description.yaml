@@ -34,9 +34,9 @@ instances:
     type: Frame
 connections:
   - ports: [joint_2.linkB, platform_frame.faceXMinus]
-    roll: 1
+    roll: 0
   - ports: [joint_4.linkB, platform_frame.faceXPlus]
-    roll: 1
+    roll: 0
   - ports: [platform_frame.faceZMinus, tool_1.connector_side]
     roll: 3
   - ports: [manipulator_1.dock, adaptor_1.attachment_point]
@@ -49,9 +49,8 @@ connections:
   - ports: [joint_3.linkB, frame_2.faceZMinus]
   - ports: [frame_2.faceXPlus, joint_4.linkA]
     roll: 1
-  - ports: [adaptor_1.pin_connector_B, frame_3.faceZMinus]
-    roll: 1
+  - ports: [adaptor_1.pin_connector_A, frame_3.faceYMinus]
   - ports: [frame_3.faceZPlus, joint_1.linkA]
-  - ports: [adaptor_2.pin_connector_B, frame_4.faceZMinus]
-    roll: 3
+  - ports: [adaptor_2.pin_connector_B, frame_4.faceYMinus]
+    roll: 2
   - ports: [frame_4.faceZPlus, joint_3.linkA]

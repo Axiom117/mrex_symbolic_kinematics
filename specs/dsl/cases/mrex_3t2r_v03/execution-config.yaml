@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=../../../schema/execution-config.schema.yaml
+# mrex_3t2r_v03 执行配置 — 3T2R 全任务空间模式（评估用）
+#
+# 本案例由 mrex_modularization 生成（stage C）。与 v01 相比，本变体将两条
+# platform 侧 Joint 设为 roll 0，左 Manipulator dock 为 roll 2，并把 Adaptor
+# 改接 pin_connector_A / frame_3.faceYMinus 与 frame_4.faceYMinus（roll 2）。
+# 具体装配以 robot_description.yaml 为准；零位标定与 k01/v01 不同，评估前
+# 必须重新导出本案例模型包。
+#
+# 求解方向：IK（已知末端位姿 → 求解 6 个驱动位移 + 4 个内部关节）。
+# 6 个 Manipulator 笛卡尔驱动位移（dx/dy/dz）+ joint_1..4.q = 10 未知量；
+# 两条 world 锚定切口 × 6 分量 = 12 残差分量。
+#
+# world_binding 的 T 省略：由 solver.ClosureSolver 在零位构型下自动标定。
+
+mode: closed_loop
+endFrame: tool_1.tip_origin
+
+# ---- L3 工具坐标系（tool_frame）----
+# 世界系 ≡ 工具坐标系零位姿态；pipette tip 零位姿态自动派生为 U⁻¹ = Ry(−45°)。
+# 与 mrex_3t2r_001 / k01 / v01 系列保持一致，便于评估结果横向对比。
+tool_frame:
+  transform:
+    rotation: { rpy: [0, 45deg, 0] }
+
+world_binding:
+  - ground: manipulator_1.ground
+  - ground: manipulator_2.ground
+
+closure_cuts:
+  - near: manipulator_1.ground
+    anchor: world
+    components: [tx, ty, tz, rx, ry, rz]
+  - near: manipulator_2.ground
+    anchor: world
+    components: [tx, ty, tz, rx, ry, rz]
+
+known:
+  - tool_1.tip_origin
+
+unknown:
+  - manipulator_1.dx
+  - manipulator_1.dy
+  - manipulator_1.dz
+  - manipulator_2.dx
+  - manipulator_2.dy
+  - manipulator_2.dz
+  - joint_1.q
+  - joint_2.q
+  - joint_3.q
+  - joint_4.q
+
+tolerances:
+  translation_mm: 0.001
+  rotation_rad: 0.001
