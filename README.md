@@ -1,4 +1,4 @@
-# symbolic-modular-kinematics
+# M-REx Symbolic Kinematics
 
 > **模块化闭环机构拓扑编码 → 正逆运动学方程自动生成**
 >
