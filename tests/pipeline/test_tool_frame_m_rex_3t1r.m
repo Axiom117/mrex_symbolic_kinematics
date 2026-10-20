@@ -9,9 +9,12 @@ function test_tool_frame_m_rex_3t1r()
 %     [2] back-compat fixture (case copy with the block stripped): U = I₄,
 %         setToolTarget ≡ setTipTarget (residual equality)
 %     [3] spelling/negative fixtures (stripped copy + appended block):
-%         numeric-rad spelling agrees with the case's "45deg"; missing
-%         transform is rejected
-%     [4] ClosureSolver resolves ToolTransform = Ry(45°) from the case config
+%         numeric-rad spelling agrees with the case's "45deg"; translation
+%         composes with rotation into T = [R t; 0 1]; missing transform is
+%         rejected
+%     [4] ClosureSolver resolves ToolTransform = Ry(45°) from the case config;
+%         a translation-bearing tool_frame resolves U = [R t; 0 1], keeps
+%         D(0) = I₄ and puts the derived tip origin at −Rᵀt
 %     [5] zero pose: evalToolPose(0) ≈ I₄ (world-aligned tool frame); derived
 %         tip initial attitude U⁻¹ = Ry(−45°) matches the design example
 %         ("pipette frame 0,0,0,0,-45°,0"); cross-checked against an
@@ -87,6 +90,21 @@ function test_tool_frame_m_rex_3t1r()
     devSpell = norm(cfgRad.ToolFrame.T - cfgBase.ToolFrame.T, 'fro');
     assert(devSpell < 1e-15, 'numeric-rad spelling and the case "45deg" must agree');
 
+    % translation (mm) composes with rotation: T = [R t; 0 1]
+    tRel = [4; -2; 7];
+    trFile = fullfile(tmpDir, 'exec-tool-translation.yaml');
+    localWriteToolFrameFixture(strippedTxt, trFile, strjoin({ ...
+        'tool_frame:'
+        '  transform:'
+        '    translation: [4, -2, 7]'
+        '    rotation: { rpy: [0, 45deg, 0] }'
+        }, newline));
+    cfgTr = ir.ExecutionConfig(trFile, e.SymbolRegistry, e.EdgeGraph_);
+    devTr = norm(cfgTr.ToolFrame.T - ...
+        localTO(core.RigidBodyMath.roty(pi/4), tRel), 'fro');
+    assert(devTr < 1e-12, ...
+        'translation must enter T_endFrame<-tool (dev = %.2e)', devTr);
+
     badFile = fullfile(tmpDir, 'exec-tool-bad.yaml');
     localWriteToolFrameFixture(strippedTxt, badFile, strjoin({ ...
         'tool_frame:'
@@ -94,8 +112,9 @@ function test_tool_frame_m_rex_3t1r()
         }, newline));
     localExpectError(@() ir.ExecutionConfig(badFile, e.SymbolRegistry, e.EdgeGraph_), ...
         'ir:ExecutionConfig:invalidToolFrame', 'tool_frame without transform');
-    fprintf('  [3] spellings: numeric rad ≡ case "45deg" (|Δ| = %.2e); missing transform rejected\n', ...
-        devSpell);
+    fprintf(['  [3] spellings: numeric rad ≡ case "45deg" (|Δ| = %.2e); ' ...
+        'translation composed (dev = %.2e); missing transform rejected\n'], ...
+        devSpell, devTr);
 
     % ---- [4] solver resolves ToolTransform = Ry(45°) from the case config ----
     cs = solver.ClosureSolver(e.EdgeGraph_, cfgBase, e.JointVarMap);
@@ -103,7 +122,39 @@ function test_tool_frame_m_rex_3t1r()
     Uinv = core.RigidBodyMath.invT(U);
     devU = norm(U - localTO(core.RigidBodyMath.roty(pi/4), [0; 0; 0]), 'fro');
     assert(devU < 1e-12, 'ToolTransform should resolve to Ry(45°), dev = %.2e', devU);
-    fprintf('  [4] ToolTransform = Ry(45°) resolved (root = endFrame, dev = %.2e)\n', devU);
+
+    % translation-bearing tool_frame: U = [R t; 0 1]; the tool origin is the
+    % rotation center, so D(0) = I4 still holds and the derived tip origin in
+    % the tool world is invT(U) = [Rᵀ, −Rᵀt]
+    csTr = solver.ClosureSolver(e.EdgeGraph_, cfgTr, e.JointVarMap);
+    UTr = csTr.ToolTransform;
+    devUtr = norm(UTr - localTO(core.RigidBodyMath.roty(pi/4), tRel), 'fro');
+    assert(devUtr < 1e-12, 'translation ToolTransform deviates (%.2e)', devUtr);
+
+    nxTr = numel(csTr.UnknownSyms);
+    D0tr = csTr.evalToolPose(zeros(nxTr, 1));
+    assert(norm(D0tr - eye(4), 'fro') < 1e-12, ...
+        'translation tool_frame: zero pose should still be I4');
+
+    UinvTr = core.RigidBodyMath.invT(UTr);
+    devTipTr = norm(UinvTr - localTO(core.RigidBodyMath.roty(-pi/4), ...
+        -core.RigidBodyMath.roty(pi/4).' * tRel), 'fro');
+    assert(devTipTr < 1e-12, 'derived tip origin should be −Rᵀt (dev = %.2e)', devTipTr);
+
+    qProbeTr = 0.01 * (1:nxTr).';
+    DtrProbe = localTO(core.RigidBodyMath.rotz(pi/12), [2; -1; 3]);
+    csTr.setTipTarget(UTr * DtrProbe * UinvTr);
+    rTrA = csTr.evalResidual(qProbeTr);
+    csTr.setToolTarget(DtrProbe);
+    rTrB = csTr.evalResidual(qProbeTr);
+    dEqTr = norm(rTrA - rTrB);
+    assert(dEqTr < 1e-15, ...
+        'translation tool_frame: setToolTarget does not match the conjugated target (|dr| = %.2e)', ...
+        dEqTr);
+
+    fprintf(['  [4] ToolTransform = Ry(45°) (dev = %.2e); translation ' ...
+        'U = [R t] (dev = %.2e), D(0) = I4, tip origin = −Rᵀt (dev = %.2e)\n'], ...
+        devU, devUtr, devTipTr);
 
     % ---- [5] zero-pose semantics (world-aligned tool frame) ----
     kmL = solver.KinematicModel(e.EdgeGraph_, 'manipulator_L.ground', e.JointVarMap);

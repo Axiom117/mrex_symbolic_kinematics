@@ -28,6 +28,9 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
 %                     solver.ClosureSolver.
 %     'Frames'      : cell of frame node names for the fk_all kernel
 %                     (default: every frame of the expanded mechanism).
+%     'Limits'      : struct with lower/upper nq-vectors (input order =
+%                     metadata.inputs.names; mm / rad); stored in metadata
+%                     as inputs.lower / inputs.upper for the runtime.
 %
 %   Generated package (all files overwritten on each call):
 %     README.md                   package documentation (generated)
@@ -75,6 +78,7 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
     knownValues = containers.Map('KeyType', 'char', 'ValueType', 'any');
     outputDir = '';
     frameSel = {};
+    limitBounds = [];
     if ~isempty(varargin)
         assert(mod(numel(varargin), 2) == 0, ...
             'solver:exportKinematics:badOptions', ...
@@ -98,6 +102,14 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
                     knownValues = oVal;
                 case 'frames'
                     frameSel = core.CommonUtils.asList(oVal);
+                case 'limits'
+                    assert(isstruct(oVal) && isfield(oVal, 'lower') && ...
+                        isfield(oVal, 'upper'), ...
+                        'solver:exportKinematics:badOption', ...
+                        'Limits must be a struct with lower/upper vectors.');
+                    limitBounds = struct( ...
+                        'lower', double(oVal.lower(:).'), ...
+                        'upper', double(oVal.upper(:).'));
                 otherwise
                     error('solver:exportKinematics:badOption', ...
                         'Unknown option ''%s''.', char(oName));
@@ -160,6 +172,15 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
     assert(nIn >= 1, ...
         'solver:exportKinematics:noInputs', ...
         'Mechanism "%s" has no %s to export.', e.MechName, inputKind);
+    if ~isempty(limitBounds)
+        assert(numel(limitBounds.lower) == nIn && ...
+            numel(limitBounds.upper) == nIn, ...
+            'solver:exportKinematics:badLimits', ...
+            'Limits must have %d entries (metadata.inputs.names order).', nIn);
+        assert(all(limitBounds.lower <= limitBounds.upper), ...
+            'solver:exportKinematics:badLimits', ...
+            'Every lower limit must be <= upper.');
+    end
 
     fprintf('  [export] %s | %s | %d inputs -> %s\n', ...
         e.MechName, cfg.Mode, nIn, outputDir);
@@ -308,6 +329,10 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
         ts.mobility, localRotationSummary(ts.rotation), ...
         ts.probe.manifold_dim, strjoin(ts.axes, ' '), toc(t0));
 
+    % ---- runtime contract: actuated/passive split + rigid tool attachment ----
+    [inputRoles, actIdx, passIdx] = localInputRoles(e, inNames, isClosed);
+    [C_end, Cconstant] = localConstantPose(poseOf(cfg.EndFrame));
+
     % ---- metadata (machine-readable package contract) ----
     meta = struct();
     meta.package_format = 'smk-kinematic-package';
@@ -335,6 +360,23 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
     inputsMeta.types = ts.types;  % per-input joint kind: prismatic / revolute
     inputsMeta.axes = ts.axes;    % per-input motion-axis label (task frame)
     inputsMeta.count = nIn;
+    % Runtime contract: which entries are actuator commands vs passive joints.
+    % closed_loop classifies Manipulator-module joints as actuated (M-REx
+    % dx/dy/dz) and every other joint as passive; open_loop inputs are all
+    % actuated by definition.
+    inputsMeta.roles = inputRoles;
+    inputsMeta.actuated_indices = actIdx;
+    inputsMeta.passive_indices = passIdx;
+    inputsMeta.actuated = inNames(actIdx);
+    inputsMeta.passive = inNames(passIdx);
+    inputsMeta.actuated_count = numel(actIdx);
+    inputsMeta.passive_count = numel(passIdx);
+    inputsMeta.lower = [];
+    inputsMeta.upper = [];
+    if ~isempty(limitBounds)
+        inputsMeta.lower = limitBounds.lower;
+        inputsMeta.upper = limitBounds.upper;
+    end
     meta.inputs = inputsMeta;
 
     kjv = cfg.getKnownJointVars();
@@ -388,7 +430,29 @@ function out = exportKinematics(dslYaml, execYaml, varargin)
     else
         tfMeta.U = localRows(eye(4));
     end
+    % U = C * U_rel: keep the rigid root->endFrame attachment separate so a
+    % runtime can replace U_rel (T_endFrame<-tool) per call without re-export.
+    tfMeta.C = localRows(C_end);
+    tfMeta.C_constant = Cconstant;
+    tfMeta.tool_declared = cfg.ToolFrame.Present;
+    tfMeta.U_rel = localRows(cfg.ToolFrame.T);
     meta.task_frame = tfMeta;
+    runtimeSupports = {'fkPackage', 'fk'};
+    if hasWorld
+        runtimeSupports = [runtimeSupports, ...
+            {'ikPackage', 'ik', 'ikTrajectory', ...
+             'fkDrivers', 'ikDrivers'}]; %#ok<AGROW>
+    elseif ~isClosed
+        runtimeSupports = [runtimeSupports, {'fkDrivers'}]; %#ok<AGROW>
+    end
+    meta.runtime = struct( ...
+        'api', 'solver.KinematicsRuntime', ...
+        'api_version', '0.1.0', ...
+        'units', 'mm/rad', ...
+        'pose_convention', 'ZYX', ...
+        'tool_frame_runtime', Cconstant, ...
+        'package', matlab.lang.makeValidName(e.MechName), ...
+        'supports', {runtimeSupports});
 
     % ---- task space（泛化元数据；来源 solver.TaskSpaceAnalyzer）----
     % mobility  / 旋转轴（mode = axis 时为任务系单位向量，与下游扫描的 phi
@@ -603,6 +667,16 @@ function localWriteReadme(filePath, e, cfg, meta, inNames, nIn, outputDir, ...
         strjoin(cellfun(@(t) sprintf('`%s`', t), meta.inputs.types, ...
         'UniformOutput', false), ' / '), ...
         strjoin(meta.inputs.axes, ' '));
+    if isfield(meta.inputs, 'actuated') && ~isempty(meta.inputs.actuated)
+        L{end+1} = sprintf('驱动/被动分区：actuated = [%s]；passive = [%s]。', ...
+            strjoin(meta.inputs.actuated, ', '), ...
+            strjoin(meta.inputs.passive, ', '));
+    end
+    if isfield(meta.inputs, 'lower') && ~isempty(meta.inputs.lower)
+        L{end+1} = sprintf('硬限位（q 顺序）：lower = [%s]；upper = [%s]。', ...
+            num2str(meta.inputs.lower, ' %.6g'), ...
+            num2str(meta.inputs.upper, ' %.6g'));
+    end
     L{end+1} = '';
     L{end+1} = '## 任务空间（瞬时分析）';
     L{end+1} = '';
@@ -678,6 +752,57 @@ function T = localEvalSym(T, syms, vals)
         T = double(subs(T, syms, vals));
     else
         T = double(T);
+    end
+end
+
+function [roles, actIdx, passIdx] = localInputRoles(e, inNames, isClosed)
+%LOCALINPUTROLES  Runtime actuated/passive split for the exported input vector.
+%   open_loop: every input is an actuated joint by definition.
+%   closed_loop: joints belonging to Manipulator modules are actuators
+%   (M-REx dx/dy/dz); all other joints are passive/internal.  This mirrors
+%   the physical architecture and keeps the package self-describing without
+%   adding a new execution-config field.
+    n = numel(inNames);
+    roles = repmat({'passive'}, 1, n);
+    if ~isClosed
+        roles = repmat({'actuated'}, 1, n);
+    else
+        for i = 1:n
+            if localInputIsManipulator(e, inNames{i})
+                roles{i} = 'actuated';
+            end
+        end
+    end
+    actIdx = find(strcmp(roles, 'actuated'));
+    passIdx = find(strcmp(roles, 'passive'));
+end
+
+function tf = localInputIsManipulator(e, varName)
+%LOCALINPUTISMANIPULATOR  True when VARNAME belongs to a Manipulator instance.
+    tf = false;
+    for i = 1:numel(e.Instances)
+        inst = e.Instances(i);
+        for k = 1:numel(inst.joints)
+            if strcmp([inst.name '.' inst.joints{k}.var], varName)
+                tf = strcmpi(inst.type, 'Manipulator');
+                return;
+            end
+        end
+    end
+end
+
+function [T, isConstant] = localConstantPose(T)
+%LOCALCONSTANTPOSE  Numeric 4×4 value when T has no free symbols.
+    if isa(T, 'sym')
+        isConstant = isempty(symvar(T));
+        if isConstant
+            T = double(T);
+        else
+            T = eye(4);
+        end
+    else
+        T = double(T);
+        isConstant = true;
     end
 end
 

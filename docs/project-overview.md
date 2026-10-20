@@ -671,7 +671,8 @@ flowchart LR
 **设计**（数学核心：共轭变换；语义细节见 `specs/dsl/connection-semantics.md` §6.5）：
 
 - **配置**：`tool_frame.transform` 定义 $U_{\text{rel}} = T_{\text{endFrame}\leftarrow\text{tool}}$
-  （与模块固定变换同构：`align`/`rpy`/`axis_angle`；角分量数值 = rad，或 `"45deg"` 显式单位）
+  （与模块固定变换同构：可选 `translation`（mm）+ `align`/`rpy`/`axis_angle`；
+  角分量数值 = rad，或 `"45deg"` 显式单位）
 - **语义**：世界系重锚定到工具系零位 → endFrame 零位姿态自动派生为 $U^{-1}$；
   输入 $\Delta T_{\text{tip}} = U\cdot\Delta_{\text{tool}}\cdot U^{-1}$（默认左乘世界系增量）、
   输出 $D(q) = U^{-1}\cdot T_{\text{rootWorld}}(q)\cdot U$，其中 $U = T_{\text{root}\leftarrow\text{tool}}$

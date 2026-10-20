@@ -230,19 +230,23 @@ $$T_{\text{residual},i} = T_{\text{near},i}(q)^{-1} \cdot (\Delta T^{-1} \cdot T
 任务目标不直观——“绕世界 z 轴旋转”在倾斜坐标系里会变成混合轴旋转。
 
 **定义**：`tool_frame` 块声明一个虚拟输入/输出参考系，由相对 `endFrame` 的固定变换
-$U_{\text{rel}} = T_{\text{endFrame}\leftarrow\text{tool}}$ 定义（与模块固定变换同构，
-支持 `align` / `rpy` / `axis_angle`；角分量数值按内部约定 = rad，或带显式单位的字符串
+$U_{\text{rel}} = T_{\text{endFrame}\leftarrow\text{tool}}$ 定义（与模块固定变换同构：
+可选 `translation`（`[x, y, z]`，单位 mm，工具系原点在 endFrame 中的位置）+ 旋转
+`align` / `rpy` / `axis_angle`；角分量数值按内部约定 = rad，或带显式单位的字符串
 如 `"45deg"` / `"0.7854rad"`）：
 
 ```yaml
 tool_frame:
   transform:
+    translation: [0, 0, 10]        # 可选；缺省 [0, 0, 0]
     rotation: { rpy: [0, 45deg, 0] }
 ```
 
 **语义（世界系重锚定）**：声明后，**世界系 ≡ 工具坐标系零位姿态**：工具系零位姿态在
 世界中为 $I_4$（初始方向与世界系平行），而 endFrame 零位姿态在世界中自动派生为
-$U_{\text{rel}}^{-1}$（上例即 `0,0,0,0,−45°,0`）。记
+$U_{\text{rel}}^{-1}$（无平移时上例即 `0,0,0,0,−45°,0`；含平移时位置分量为
+$-R^{T}t$）。`translation` 同时把 `setToolTarget` 的旋转中心与 `evalToolPose` 的
+报告原点移到工具系原点。记
 $U = T_{\text{root}\leftarrow\text{tool}} = T_{\text{root}\leftarrow\text{endFrame}} \cdot U_{\text{rel}}$：
 
 | 操作 | 公式 | 接口 |

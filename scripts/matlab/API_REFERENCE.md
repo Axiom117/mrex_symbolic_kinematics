@@ -16,6 +16,8 @@
 | `+solver/` | [ClosureSolver](#closuresolver) | handle 类 | 闭环残差构造 + fmincon 求解 |
 | `+solver/` | [buildPoseSequence](#buildposesequence) | 函数 | FK 位姿序列构建（Q → PoseFrames） |
 | `+solver/` | [exportKinematics](#exportkinematics) | 函数 | 自包含模型包导出（编译器 → 模型包） |
+| `+solver/` | [KinematicsRuntime](#kinematicsruntime) | handle 类 | 模型包运行时（IK/FK + 运行时 tool frame + 驱动-only FK） |
+| `+solver/` | [exportDeployment](#exportdeployment) | 函数 | 模型包部署（命名空间内核 + smk runtime + manifest） |
 | `+viz/` | [mechanism](#mechanism) | 函数 | 机构装配与可视化 |
 | `+viz/` | [module](#module) | 函数 | 单模块可视化校验 |
 | `+viz/` | [animate](#animate) | 函数 | 轨迹动画兼容包装（buildPoseSequence + play） |
@@ -202,8 +204,9 @@ cfg = ir.ExecutionConfig('exec-config.yaml', e.SymbolRegistry, e.EdgeGraph_);
 3. **Registry 交叉校验**: 所有 ref 必须在 `SymbolRegistry` 中存在；joint 变量必须完整覆盖（不重不漏）
 4. **closure_cuts 自动推导**: 若 YAML 未声明，从 `EdgeGraph.findMates()` 中提取 `kind='closed_mate'` 的边
 5. **tool_frame 解析（可选）**: `tool_frame.transform` → `T_endFrame←tool`（4×4 double）。
-   旋转支持 `align` / `rpy` / `axis_angle`（与模块定义同构）；角分量数值 = rad，
-   或带显式单位的字符串（`"45deg"` / `"0.7854rad"`）。缺 `transform` 时报
+   可选 `translation`（`[x, y, z]` mm，缺省 `[0, 0, 0]`）；旋转支持 `align` / `rpy` /
+   `axis_angle`（与模块定义同构）；角分量数值 = rad，或带显式单位的字符串
+   （`"45deg"` / `"0.7854rad"`）。缺 `transform` 时报
    `ir:ExecutionConfig:invalidToolFrame`。语义（世界系重锚定）见
    `specs/dsl/connection-semantics.md` §6.5
 
@@ -442,6 +445,7 @@ viz.play(seq, scene, 'Fps', 15);
 | `'OutputDir'` | char | 模型包目录；默认 `<caseDir>/generated`（<caseDir> = DSL 文件所在目录） |
 | `'KnownValues'` | `containers.Map` | known 关节的数值（canonical 名 → 值；缺省 0，同 `ClosureSolver`） |
 | `'Frames'` | cell | `fk_all` 的 frame 子集（默认全部） |
+| `'Limits'` | struct(`lower`,`upper`) | 写入 `inputs.lower/upper` 的硬限位（nq 向量，mm / rad） |
 
 #### 产物文件
 
@@ -480,6 +484,97 @@ D = fk_tool(q);           poses = fk_all(q);
 #### See Also
 
 `+solver/ClosureSolver`, `+ir/Expander`, `+ir/ExecutionConfig`, `+solver/buildPoseSequence`
+
+---
+
+### KinematicsRuntime
+
+**类型**: handle 类  
+**文件**: `+solver/KinematicsRuntime.m`  
+**签名**: `rt = solver.KinematicsRuntime(pkgDir)`  
+**职责**: 消费 `solver.exportKinematics` 生成的模型包，提供无 Symbolic Toolbox 的通用数值 IK/FK 运行时（E2-P0）。直接复用包内 `closure_residual*.m` / `fk_tool.m` / `fk_all_matrix.m`，并支持运行时 tool frame 与驱动-only FK。
+
+#### 主要接口
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `fkPackage` | `D = rt.fkPackage(q)` | 包任务位姿（`D(0)=I₄`，world_tool 包） |
+| `fk` | `T = rt.fk(q, Urel)` | 固定世界系工具位姿；`Urel = T_tip←tool`，缺省用 metadata 中的默认值 |
+| `ikPackage` | `[q, ok, info] = rt.ikPackage(D, q0)` | 目标任务位姿 `D` → q（LM + warm start） |
+| `ik` | `[q, ok, info] = rt.ik(T, Urel, q0)` | 固定世界系工具位姿 → q |
+| `ikDrivers` | `[d, qint, ok, info, q] = rt.ikDrivers(T, Urel, q0)` | IK 后按 metadata 拆出驱动/被动关节 |
+| `fkDrivers` | `[T, q, ok, info] = rt.fkDrivers(d, Urel, qint)` | 由驱动位移做 FK；无 `qint` 时用 ground-ground 相对闭环解被动关节 |
+| `ikTrajectory` | `[qTraj, dTraj, ok, info] = rt.ikTrajectory(Ttargets, Urel, q0, opts)` | 批量轨迹 IK：warm start、每帧残差/限位/分支跳变诊断 |
+| `setLimits` / `clearLimits` | `rt.setLimits(lower, upper)` | 运行时硬限位（nq 向量，mm / rad） |
+| `utilization` | `u = rt.utilization(q)` | 有 `inputs.lower/upper` 时的最坏限位利用率 |
+
+`ikTrajectory` 的 `Ttargets` 支持 `4×4×N`、`1×N cell`、`N×6 [x y z rx ry rz]`；`Urel`
+支持常量、逐帧 cell / 4×4×N / N×6。输出 `qTraj` 为 `N×nq`，`dTraj` 为
+`N×numel(ActuatedIndices)`；`info` 逐帧记录 `maxAbs` / `iterations` / `utilization` /
+`limitActive` / `branchJump` / `feasible`。
+
+#### 元数据契约（runtime 相关）
+
+- `inputs.roles` / `inputs.actuated_indices` / `inputs.passive_indices`：驱动/被动关节分区；
+- `task_frame.U`：`U0 = T_root←tool`（零位）；
+- `task_frame.C`：`C = T_root←endFrame`（tip-rooted 案例为 `I₄`）；
+- `task_frame.U_rel`：导出时声明的默认 `T_endFrame←tool`；
+- `runtime.api_version` / `runtime.supports`：运行时契约。
+
+#### 使用示例
+
+```matlab
+rt = solver.KinematicsRuntime('specs/dsl/cases/mrex_3t2r_v00/generated');
+T  = rt.fk(zeros(10,1));                  % 默认工具位姿（v00: Ry(45°)）
+[q, ok] = rt.ik(T);                       % 回到零位
+[d, qint, ok] = rt.ikDrivers(T);           % 前 6 个驱动 + 4 个被动关节
+T2 = rt.fkDrivers(d);                      % 仅由 6 个驱动恢复位姿
+```
+
+#### See Also
+
+`solver.exportKinematics`, `solver.exportDeployment`, `+solver/ClosureSolver`
+
+---
+
+### exportDeployment
+
+**类型**: 函数  
+**文件**: `+solver/exportDeployment.m`  
+**签名**: `out = solver.exportDeployment(pkgDir, Name, Value...)`  
+**职责**: 把现有模型包打包为消费者可部署的目录结构（P0 部署层）。只依赖 base MATLAB，不运行符号管线。
+
+#### 产物
+
+| 路径 | 说明 |
+|------|------|
+| `+<mechanism>/` | 命名空间化的数值内核（`closure_residual*.m` / `fk_tool.m` / `fk_all*.m`） |
+| `+smk/KinematicsRuntime.m` | 自包含通用运行时类 |
+| `IK_<mechanism>.m` | 顶层 IK 包装（仅支持 IK 的包） |
+| `FK_<mechanism>.m` | 顶层 FK 包装 |
+| `runtime_manifest.json` | 部署清单（kernel package、runtime class、API 版本、驱动/被动索引、限位、wrapper 名称） |
+
+> `IK_/FK_` 包装使用固定世界系工具位姿（4×4，mm / rad）与
+> `metadata.inputs.names` 顺序，不是旧版 mrex_generative 的 package `fk_tool`
+> 位姿 + mm/deg 契约。
+
+#### 名称-值选项
+
+| 选项 | 取值 | 说明 |
+|------|------|------|
+| `'OutputDir'` | char | 输出目录；默认与 `pkgDir` 相同 |
+
+#### 使用示例
+
+```matlab
+out = solver.exportDeployment('specs/dsl/cases/mrex_3t2r_v00/generated');
+addpath(out.OutputDir);
+rt = smk.KinematicsRuntime(out.OutputDir);   % 自动使用 +mrex_3t2r_v00 内核
+```
+
+#### See Also
+
+`solver.exportKinematics`, `solver.KinematicsRuntime`
 
 ---
 

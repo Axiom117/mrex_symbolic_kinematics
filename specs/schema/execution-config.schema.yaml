@@ -19,9 +19,9 @@
 #     ground frame，且须匹配 EdgeGraph 中的 closed_mate 边
 #   - closure_cuts 中 anchor: world（L3 world 锚定切口）的 near 必须命中
 #     world_binding 的某条 ground；binding 的 T 省略时由求解器零位自动标定
-#   - tool_frame（L3 工具坐标系）：transform 相对 endFrame 定义；rpy / axis_angle
-#     的角分量接受数值（按内部约定 = rad）或带显式单位的字符串（如 "45deg"、
-#     "0.7854rad"），由 ExecutionConfig 归一化为 rad
+#   - tool_frame（L3 工具坐标系）：transform（可选 translation（mm）+ 旋转）相对
+#     endFrame 定义；rpy / axis_angle 的角分量接受数值（按内部约定 = rad）或带显式
+#     单位的字符串（如 "45deg"、"0.7854rad"），由 ExecutionConfig 归一化为 rad
 #   - tool_frame 声明后“世界系 ≡ 工具坐标系零位姿态”；求解器要求 FK root→endFrame
 #     位姿链无关节（刚性链），否则报错（solver:ClosureSolver:flexibleToolFrame）
 

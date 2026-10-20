@@ -23,6 +23,7 @@ endFrame: tool_1.tip_origin
 # 与 mrex_3t2r_001 / v01–v04 系列保持一致，便于评估结果横向对比。
 tool_frame:
   transform:
+    # translation: [0, 0, 0]     # 可选 [x, y, z] mm，工具系原点相对 endFrame；缺省 0
     rotation: { rpy: [0, 45deg, 0] }
 
 world_binding:

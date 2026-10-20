@@ -140,6 +140,8 @@ graph TD
 | `specs/schema/*.schema.yaml` | 3 份 JSON Schema：模块 YAML / DSL YAML / IR 图 的结构校验 | 可执行校验 | 对应层的权威 docs + `conventions.yaml` | 校验工具链 |
 | `scripts/matlab/ARCHITECTURE.md` | MATLAB 4 层代码架构（+viz / +ir / +core）、数据流、设计决策 | 实现文档 | 全部 IR spec, `connection-semantics.md`, `Expander.m`/`EdgeGraph.m` 代码 | `scripts/matlab/README.md` |
 | `scripts/matlab/MODEL_EXPORT.md` | 模型导出三段式规划（编译器 → 模型包 → 运行引擎）、产物规范、E1–E4 | 实现文档 | `ARCHITECTURE.md`, `API_REFERENCE.md`, `project-overview.md`（A.5.4）, `+solver/exportKinematics.m` | 消费端集成（PathPlanner / M-REx Generative）、各案例 `generated/` 产物 |
+| `scripts/matlab/+solver/KinematicsRuntime.m` / `exportDeployment.m` | E2-P0 运行时：target-aware IK/FK、运行时 tool frame、驱动-only FK、部署包 | 实现代码 | `exportKinematics.m` 模型包、`API_REFERENCE.md` | PathPlanner / mrex_generative 的运行时适配 |
+| `docs/reference/pathplanner-kinematics-integration.md` | 从模型导出到 PathPlanner 的完整集成指南：组件、产物、运行时契约、适配清单 | 集成文档 | `MODEL_EXPORT.md`, `API_REFERENCE.md`, `KinematicsRuntime.m`, `exportDeployment.m`, `pathplanner-architecture.md` | PathPlanner 侧 `onCalcIK` / `onCalcFK` 开发 |
 | `docs/reference/*` | 4 份背景参考：IK 求解器、PathPlanner、Simulink 库、URDF 分析 | 背景参考 | — | `project-overview.md`（引为参考依据） |
 
 ---
@@ -158,6 +160,7 @@ graph TD
 | `PosePropagator.m` | `edge-types.md` + `ARCHITECTURE.md` |
 | `project-overview.md` | 阶段描述变化的对应 spec 文件（如 A.2 变更 → `grammar.md`、DSL 案例） |
 | `+solver/exportKinematics.m` / 模型包契约 | `MODEL_EXPORT.md` + `API_REFERENCE.md` + 3 个导出测试 + 重新导出各案例 `generated/`（模板变更时） |
+| `+solver/KinematicsRuntime.m` / `exportDeployment.m` | `API_REFERENCE.md` + `MODEL_EXPORT.md`（E2-P0）+ `pathplanner-kinematics-integration.md` + `test_kinematics_runtime_*` + 重新部署各案例 `generated/` |
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 type: technical-doc
 created: 2026-06-05
-updated: 2026-06-05
+updated: 2026-10-20
 repo: https://github.com/Axiom117/PathPlanner
 status: implemented
 ---
@@ -236,3 +236,5 @@ sequenceDiagram
 - 下游：[[2.2 ControllerPanel - 微操作器控制与通信]] — TCP 通信对端
 - 上游：MRE 第二版 Hypercube 物理机构 → [[../0. 工程概述]]
 - 应用：果蝇胚胎自动化显微操作 → [[../../3. Applications/3.2 果蝇胚胎显微注射/]]
+- 集成：本仓库导出的运动学模型包 → PathPlanner 的完整接入流程见
+  [`pathplanner-kinematics-integration.md`](./pathplanner-kinematics-integration.md)

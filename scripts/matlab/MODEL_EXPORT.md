@@ -132,7 +132,9 @@ graph TB
 | :--- | :--- | :--- |
 | **E1** 导出器 v0 | `solver.exportKinematics` → 自包含模型包（residual / jacobian / fk_tool / fk_all / metadata / README）；三案例导出测试全绿 | ✅ 2026-10-14 |
 | **E1 v0.2** 泛化任务空间元数据 | `solver.TaskSpaceAnalyzer` → 导出新增 `inputs.types/axes` + `task_space{mobility, rotation, dims, probe}`；mrex_generative 据此自动生成评估 config（dsl → 导出 → 评估全链路打通） | ✅ 2026-10-15 |
-| **E2** 运行引擎原型 | 无符号工具箱的最小运行类（GN/LM + warm-start）+ 模型包回放校验（轨迹残差 < 容差、与 fmincon 对照） | ⬜ |
+| **E2-P0** 运行时内核 | `solver.KinematicsRuntime`（target-aware LM IK + warm-start + 运行时 tool frame + 驱动-only FK）+ `solver.exportDeployment`（命名空间内核 + `smk.KinematicsRuntime` + manifest）；v00 端到端测试全绿 | ✅ 2026-10-20 |
+| **E2-P1** 轨迹/限位/部署包装 | `ikTrajectory`（批量 warm-start + 分支跳变/限位诊断）、`setLimits` / `Limits` 元数据、`IK_<name>.m` / `FK_<name>.m` 顶层包装 | ✅ 2026-10-20 |
+| **E2** 运行引擎原型 | 无符号工具箱的最小运行类（GN/LM + warm-start）+ 模型包回放校验（轨迹残差 < 容差、与 fmincon 对照） | 🔄 P0/P1 已完成，解析被动雅可比 / 流形投影待补 |
 | **E3** 消费端集成 | PathPlanner `onCalcIK` / `onCalcFK` 替换（A.7.1）；M-REx Generative 采样 / 灵巧度评估 | ⬜ |
 | **E4** 介质扩展 | C-MEX / MATLAB Coder 构建、JSON 抽象计算图（跨语言）、模型包版本化交付（tag / 归档） | ⬜ |
 
