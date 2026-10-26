@@ -4,12 +4,20 @@ function play(poseSeq, scene, varargin)
 %   viz.play(POSESEQ, SCENE, 'Fps', FPS)
 %   viz.play(POSESEQ, SCENE, 'ShowTrail', TF)
 %   viz.play(POSESEQ, SCENE, 'ExtraFrames', EF)
+%   viz.play(POSESEQ, SCENE, 'View', [AZ EL])
+%   viz.play(POSESEQ, SCENE, 'FixedView', TF)
 %
 %   POSESEQ : struct from solver.buildPoseSequence — per-frame mechanism poses
 %   SCENE   : struct from viz.sceneSpec — static scene description
 %   EF      : struct array {Label, Base, T} — virtual frames drawn per frame
 %             at pose(Base)*T (e.g. the L3 tool frame attached to the FK
 %             root); cleared/redrawn with the mechanism like the bodies.
+%   AZ/EL   : fixed camera azimuth/elevation in degrees (default [135 25]).
+%   TF      : 'FixedView' (default true) freezes the axes: the limits are
+%             computed once from the swept volume of the whole sequence
+%             (bodies, trail, triads) and locked with axis vis3d, so the
+%             camera no longer re-zooms/re-centres as the mechanism moves.
+%             Set false for the old auto-scaling behaviour.
 %
 %   The renderer never computes kinematics: every frame is redrawn from the
 %   pose data in POSESEQ.Frames, already expressed in the sequence's anchor
@@ -30,7 +38,8 @@ function play(poseSeq, scene, varargin)
         'POSESEQ and SCENE must be structs (see solver.buildPoseSequence / viz.sceneSpec).');
 
     % ---- parse name-value options ----
-    opts = struct('Fps', 10, 'ShowTrail', true, 'ExtraFrames', struct([]));
+    opts = struct('Fps', 10, 'ShowTrail', true, 'ExtraFrames', struct([]), ...
+        'View', [135 25], 'FixedView', true);
     if ~isempty(varargin)
         assert(mod(numel(varargin), 2) == 0, ...
             'viz:play:badOptions', 'Name-value options must come in pairs.');
@@ -56,6 +65,16 @@ function play(poseSeq, scene, varargin)
                             'ExtraFrames(%d) must have fields Label, Base, T.', k);
                     end
                     opts.ExtraFrames = oVal;
+                case 'view'
+                    assert(isnumeric(oVal) && numel(oVal) == 2 ...
+                        && all(isfinite(oVal(:))), 'viz:play:badView', ...
+                        'View must be a finite [azimuth elevation] pair (degrees).');
+                    opts.View = double(oVal(:).');
+                case 'fixedview'
+                    assert(isscalar(oVal) && (islogical(oVal) || isnumeric(oVal)), ...
+                        'viz:play:badFixedView', ...
+                        'FixedView must be a logical scalar.');
+                    opts.FixedView = logical(oVal);
                 otherwise
                     error('viz:play:badOption', 'Unknown option ''%s''.', oName);
             end
@@ -73,7 +92,8 @@ function play(poseSeq, scene, varargin)
     fig = figure('Name', sprintf('Animation: %s', poseSeq.MechName), 'Color', 'w', ...
         'NumberTitle', 'off');
     ax = axes('Parent', fig); hold(ax, 'on'); grid(ax, 'on'); axis(ax, 'equal');
-    view(ax, 135, 25); xlabel(ax, 'X (mm)'); ylabel(ax, 'Y (mm)'); zlabel(ax, 'Z (mm)');
+    view(ax, opts.View(1), opts.View(2)); camproj(ax, 'orthographic');
+    xlabel(ax, 'X (mm)'); ylabel(ax, 'Y (mm)'); zlabel(ax, 'Z (mm)');
     title(ax, sprintf('%s  —  frame 1 / %d', poseSeq.MechName, nFrames), ...
         'Interpreter', 'none');
 
@@ -108,12 +128,32 @@ function play(poseSeq, scene, varargin)
     state.useWorldAnchor = useWorldAnchor;
     state.showTrail      = showTrail;
     state.extraFrames    = opts.ExtraFrames;
+    state.fixedView      = opts.FixedView;
+    state.limits         = [];
 
     % ---- store state in figure for callbacks ----
     fig.UserData = state;
 
     % ---- draw first frame ----
     renderCurrentFrame(fig);
+
+    % ---- freeze the camera: limits from the whole swept volume ----
+    % Auto axis limits are recomputed whenever renderFrame swaps the dynamic
+    % children, which used to re-zoom/re-centre the view while the mechanism
+    % moved.  Compute the union once and lock it (axis vis3d also freezes the
+    % data aspect ratio and the camera view angle).
+    if opts.FixedView
+        lim = computeFixedLimits(poseSeq, scene, opts.ExtraFrames);
+        applyFixedLimits(ax, lim);
+        drawnow;
+        axis(ax, 'vis3d');
+        view(ax, opts.View(1), opts.View(2));
+        drawnow;
+        % store the effective (aspect-corrected) limits
+        state = fig.UserData;
+        state.limits = [xlim(ax), ylim(ax), zlim(ax)];
+        fig.UserData = state;
+    end
 
     % ---- playback controls ----
     btnW = 50; btnH = 22; margin = 8;
@@ -197,6 +237,11 @@ function renderCurrentFrame(fig)
 
     if state.useWorldAnchor && state.showTrail
         drawTrail(ax, seq.Trail, i);
+    end
+
+    % fixed camera: re-assert the locked limits (no auto zoom/pan)
+    if state.fixedView && ~isempty(state.limits)
+        applyFixedLimits(ax, state.limits);
     end
 
     % update title
@@ -300,4 +345,101 @@ function drawTrail(ax, trailPos, iFrame)
     plot3(ax, trailPos(1, iFrame), trailPos(2, iFrame), trailPos(3, iFrame), ...
         'o', 'MarkerSize', 7, 'MarkerEdgeColor', [0.3 0.15 0.0], ...
         'MarkerFaceColor', [0.95 0.55 0.15], 'Tag', 'vizDynamic');
+end
+
+function applyFixedLimits(ax, lim)
+%APPLYFIXEDLIMITS  Apply a frozen [xmin xmax ymin ymax zmin zmax] box.
+    xlim(ax, lim(1:2));
+    ylim(ax, lim(3:4));
+    zlim(ax, lim(5:6));
+end
+
+function lim = computeFixedLimits(seq, scene, extraFrames)
+%COMPUTEFIXEDLIMITS  Bounding box of everything drawn over the whole sequence.
+%   Unions the swept body volume, frame origins, trail, ground bindings and
+%   triad arms so viz.play can lock the axes instead of letting auto limits
+%   follow the mechanism frame by frame.
+
+    L = scene.L;
+    pts = zeros(3, 0);
+
+    % world triad at the origin (arm length 1.4·L)
+    for a = 1:3
+        pts(:, end+1) = 1.4 * L * double((1:3).' == a); %#ok<AGROW>
+    end
+
+    % ground bindings + their triads (world/tool anchor modes)
+    for g = 1:numel(seq.Tbind)
+        Tb = seq.Tbind{g};
+        pts(:, end+1) = Tb(1:3, 4); %#ok<AGROW>
+        for a = 1:3
+            pts(:, end+1) = Tb(1:3, 4) + 1.2 * L * Tb(1:3, a); %#ok<AGROW>
+        end
+    end
+
+    % per-instance body bounding radius (cached STL, else fallback box)
+    radii = bodyRadii(scene);
+
+    % swept body/frame volume over all frames
+    for k = 1:numel(seq.Frames)
+        P = seq.Frames{k};
+        frameNames = keys(P);
+        for kk = 1:numel(frameNames)
+            T = P(frameNames{kk});
+            pts(:, end+1) = T(1:3, 4); %#ok<AGROW>
+        end
+        for ii = 1:numel(scene.Instances)
+            for bi = 1:numel(scene.Instances(ii).bodies)
+                node = scene.Instances(ii).bodies{bi}.node;
+                if ~isKey(P, node); continue; end
+                o = P(node); o = o(1:3, 4);
+                r = radii(ii);
+                corners = [-1 -1 -1; 1 -1 -1; -1 1 -1; 1 1 -1; ...
+                           -1 -1  1; 1 -1  1; -1 1  1; 1 1  1].';
+                pts = [pts, o + r * corners]; %#ok<AGROW>
+            end
+        end
+        % virtual frames: pose(Base)·T, triad arm 1.1·L
+        for ef = 1:numel(extraFrames)
+            E = extraFrames(ef);
+            if ~isKey(P, E.Base); continue; end
+            Tf = P(E.Base) * E.T;
+            for a = 1:3
+                pts(:, end+1) = Tf(1:3, 4) + 1.1 * L * Tf(1:3, a); %#ok<AGROW>
+            end
+        end
+    end
+
+    % tip trail (world/tool anchor modes)
+    if ~isempty(seq.Trail)
+        pts = [pts, seq.Trail];
+    end
+
+    lo = min(pts, [], 2);
+    hi = max(pts, [], 2);
+    pad = 0.10 * max(hi - lo) + 0.25 * L;
+    lim = [lo(1) - pad, hi(1) + pad, ...
+           lo(2) - pad, hi(2) + pad, ...
+           lo(3) - pad, hi(3) + pad];
+end
+
+function radii = bodyRadii(scene)
+%BODYRADII  Bounding-sphere radius of each instance's bodies [mm].
+    L = scene.L;
+    fallback = 0.30 * sqrt(3) * L;   % body without usable geometry: 0.30·L box
+    radii = fallback * ones(1, numel(scene.Instances));
+    for ii = 1:numel(scene.Instances)
+        bodies = scene.Instances(ii).bodies;
+        if isempty(bodies); continue; end
+        radii(ii) = 0;
+        for bi = 1:numel(bodies)
+            r = fallback;
+            g = bodies{bi}.geometry;
+            if ~isempty(g) && isKey(scene.GeomCache, g)
+                geom = scene.GeomCache(g);
+                r = max(sqrt(sum(geom.Vertices .^ 2, 2)));
+            end
+            radii(ii) = max(radii(ii), r);
+        end
+    end
 end

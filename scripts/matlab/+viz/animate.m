@@ -32,6 +32,11 @@ function animate(dslYaml, jointTrajectory, varNames, fps, varargin)
 %   (full path as a faint dashed line, traversed segment highlighted, current
 %   tip marked).  Only meaningful in 'world' anchor mode; default true.
 %
+%   viz.animate(..., 'View', [AZ EL]) sets the fixed camera orientation
+%   (degrees, default [135 25]); 'FixedView', TF (default true) freezes the
+%   axes limits/camera during playback so the view does not follow the
+%   mechanism (see viz.play).
+%
 %   Playback controls (buttons at bottom of figure):
 %     ▶ Play / ⏸ Pause    — toggle playback
 %     ⏮ Reset             — jump to first frame
@@ -56,7 +61,8 @@ function animate(dslYaml, jointTrajectory, varNames, fps, varargin)
     if nargin < 4 || isempty(fps); fps = 10; end
 
     % ---- parse name-value options ----
-    opts = struct('Anchor', 'root', 'ShowTrail', true);
+    opts = struct('Anchor', 'root', 'ShowTrail', true, ...
+        'View', [135 25], 'FixedView', true);
     if ~isempty(varargin)
         assert(mod(numel(varargin), 2) == 0, ...
             'viz:animate:badOptions', 'Name-value options must come in pairs.');
@@ -75,6 +81,16 @@ function animate(dslYaml, jointTrajectory, varNames, fps, varargin)
                     assert(isscalar(oVal) && (islogical(oVal) || isnumeric(oVal)), ...
                         'viz:animate:badShowTrail', 'ShowTrail must be a logical scalar.');
                     opts.ShowTrail = logical(oVal);
+                case 'view'
+                    assert(isnumeric(oVal) && numel(oVal) == 2 ...
+                        && all(isfinite(oVal(:))), 'viz:animate:badView', ...
+                        'View must be a finite [azimuth elevation] pair (degrees).');
+                    opts.View = double(oVal(:).');
+                case 'fixedview'
+                    assert(isscalar(oVal) && (islogical(oVal) || isnumeric(oVal)), ...
+                        'viz:animate:badFixedView', ...
+                        'FixedView must be a logical scalar.');
+                    opts.FixedView = logical(oVal);
                 otherwise
                     error('viz:animate:badOption', 'Unknown option ''%s''.', oName);
             end
@@ -100,7 +116,8 @@ function animate(dslYaml, jointTrajectory, varNames, fps, varargin)
 
     % ---- render layer: static scene snapshot + pure playback ----
     scene = viz.sceneSpec(expander);
-    viz.play(seq, scene, 'Fps', fps, 'ShowTrail', opts.ShowTrail);
+    viz.play(seq, scene, 'Fps', fps, 'ShowTrail', opts.ShowTrail, ...
+        'View', opts.View, 'FixedView', opts.FixedView);
 end
 
 

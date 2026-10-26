@@ -202,7 +202,7 @@ norm(fk_tool(q) - eye(4)) < 1e-12       % 工具系零位
 size(closure_residual_jacobian(q))      % [12 10]，全部有限
 ```
 
-v00 的预期：`U0 = Ry(45°)`、`C = I₄`、`inputs.roles` 为 6 个 `actuated` + 4 个 `passive`。
+v00 的预期：`U0 = Trans(0, 0, -1 mm)`（工具系姿态与 tip 零位重合）、`C = I₄`、`inputs.roles` 为 6 个 `actuated` + 4 个 `passive`。
 
 ### 4.3 生成部署包
 
@@ -351,12 +351,13 @@ PathPlanner/
 classdef PathPlannerKinematics < handle
     properties
         rt
-        Urel = eye(4)      % 默认 tool frame
+        Urel                % 默认使用包内声明的 tool frame
     end
     methods
         function obj = PathPlannerKinematics(pkgDir)
             addpath(pkgDir);
             obj.rt = smk.KinematicsRuntime(pkgDir);
+            obj.Urel = obj.rt.Urel0;
         end
     end
 end
@@ -452,7 +453,7 @@ PathPlanner 仍负责目标路径的生成、插值、时间参数化和 `PATH_D
 每次任务可以传不同的 `Urel`：
 
 ```matlab
-Urel = eye(4);
+Urel = eye(4);                     % 显式覆盖包默认 tool frame
 Urel(1:3, 1:3) = Rz(rz) * Ry(ry) * Rx(rx);
 Urel(1:3, 4) = [tx; ty; tz];       % mm
 obj.Urel = Urel;

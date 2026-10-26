@@ -19,12 +19,12 @@ mode: closed_loop
 endFrame: tool_1.tip_origin
 
 # ---- L3 工具坐标系（tool_frame）----
-# 世界系 ≡ 工具坐标系零位姿态；pipette tip 零位姿态自动派生为 U⁻¹ = Ry(−45°)。
-# 与 mrex_3t2r_001 / v01–v04 系列保持一致，便于评估结果横向对比。
+# 工具系姿态与 tool_1.tip_origin 零位姿态重合，仅沿 tip 的 -Z 平移 1 mm。
+# T_endFrame←tool = Trans(0, 0, -1)（无旋转）；零位时 tip 在该工具系中为 +1 mm Z 偏置。
 tool_frame:
   transform:
-    # translation: [0, 0, 0]     # 可选 [x, y, z] mm，工具系原点相对 endFrame；缺省 0
-    rotation: { rpy: [0, 45deg, 0] }
+    translation: [0, 0, -1]     # mm，工具系原点相对 endFrame
+    rotation: { rpy: [0, 0, 0] }
 
 world_binding:
   - ground: manipulator_1.ground

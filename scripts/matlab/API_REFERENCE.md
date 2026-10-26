@@ -466,7 +466,7 @@ D = fk_tool(q);           poses = fk_all(q);
 
 ```matlab
 rt = solver.KinematicsRuntime('specs/dsl/cases/mrex_3t2r_v00/generated');
-T  = rt.fk(zeros(10,1));                  % 默认工具位姿（v00: Ry(45°)）
+T  = rt.fk(zeros(10,1));                  % 默认工具位姿（v00: Trans(0,0,-1 mm)）
 [q, ok] = rt.ik(T);                       % 回到零位
 [d, qint, ok] = rt.ikDrivers(T);           % 前 6 个驱动 + 4 个被动关节
 T2 = rt.fkDrivers(d);                      % 仅由 6 个驱动恢复位姿
@@ -631,6 +631,8 @@ disp(r.frames.linkB);  % 4×4 double 位姿
 | `'Fps'` | `double`（默认 10） | 播放速度 |
 | `'ShowTrail'` | `logical`（默认 `true`） | tip 轨迹叠加（`'world'` / `'tool'` 序列生效） |
 | `'ExtraFrames'` | struct array `{Label, Base, T}` | 逐帧挂载绘制的虚拟坐标系：位姿 = `pose(Base)·T`（如把 L3 工具系 triad 挂到 FK root 上；`'tool'` 世界里与世界轴重合） |
+| `'View'` | `[az el]`（默认 `[135 25]`） | 固定相机方位角/仰角（度） |
+| `'FixedView'` | `logical`（默认 `true`） | 播放前按整条序列的扫掠体积（本体、轨迹、triad）一次性计算并锁定坐标轴范围（`axis vis3d`），视角不再随机构运动缩放/漂移；设为 `false` 恢复旧的自适应范围行为 |
 
 #### 播放控件
 
@@ -684,6 +686,8 @@ disp(r.frames.linkB);  % 4×4 double 位姿
 |------|------|------|
 | `'Anchor'` | `'root'`（默认）或 `'world'` | 显示参照系。`'world'` 把 tool-rooted FK 位姿经 $E(q)=T_{\text{bind}}\cdot T_{\text{tip}\leftarrow g_{\text{ref}}}^{-1}(q)$ 共轭到世界系，使 L3 世界系闭环机构（如 mrex-3t1r_001）的两台 Manipulator ground frame 静止于标定位姿、工具端真实移动。要求机构存在 `semantic_tag: 'ground'` 的 frame；$T_{\text{bind}}$ 取零位 FK（与 `solver.ClosureSolver` 自动标定一致）；多余 ground frame 打印分支一致性诊断 |
 | `'ShowTrail'` | `logical`，默认 `true` | 叠加 tip 世界轨迹：完整路径淡虚线 + 已走过段高亮 + 当前 tip 标记（仅 `'world'` 模式生效） |
+| `'View'` | `[az el]`，默认 `[135 25]` | 固定相机方位角/仰角（度） |
+| `'FixedView'` | `logical`，默认 `true` | 锁定坐标轴范围与相机（与 `viz.play` 同义），视角不随机构运动漂移 |
 
 #### 性能优化（位于计算层与渲染层）
 

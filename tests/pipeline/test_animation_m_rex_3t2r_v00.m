@@ -24,9 +24,9 @@ function test_animation_m_rex_3t2r_v00()
 %     [1] symbolic pipeline + bindings (rot(P_L) == rot(P_R))
 %     [2] closed form built: rotation-family exactness on BOTH branches +
 %         travel envelope (20/20/30 mm) + tool-axis sweep on the unit sphere
-%     [3] solver config: v00 execution config resolves U = Ry(45°)
+%     [3] solver config: v00 execution config resolves U = Trans(0,0,-1 mm)
 %     [4] compute layer: solver.buildPoseSequence('Anchor','tool') — tip path
-%         = U⁻¹·D_k, zero pose shows the −45° pipette tilt, grounds static,
+%         = U⁻¹·D_k, zero pose shows the +1 mm Z tool offset, grounds static,
 %         branch gap ~1e-14
 %     [5] solver cross-check: ClosureSolver residual (setTipTarget) and
 %         evalToolPose (tool-frame reporting) at sampled frames
@@ -128,16 +128,18 @@ function test_animation_m_rex_3t2r_v00()
         'max travel |dx|=%.2f |dy|=%.2f |dz|=%.2f mm (limits 20/20/30); ' ...
         'tool-axis sweep <= %.1f deg\n'], maxFamDev, mX, mY, mZ, axTilt);
 
-    % ---- [3] solver config: case tool frame resolves to U = Ry(45°) ----
+    % ---- [3] solver config: case tool frame resolves to U = Trans(0,0,-1) ----
     cfg = ir.ExecutionConfig(execFile, e.SymbolRegistry, e.EdgeGraph_);
     cs = solver.ClosureSolver(e.EdgeGraph_, cfg, e.JointVarMap);
     assert(numel(cs.UnknownSyms) == 10, ...
         'expected 10 unknowns (6 manip + 4 hinge), got %d.', numel(cs.UnknownSyms));
     U = cs.ToolTransform;
-    devU = norm(U - localTO(core.RigidBodyMath.roty(pi/4), [0; 0; 0]), 'fro');
-    assert(devU < 1e-12, 'case tool frame should resolve to Ry(45°), dev %.3e', devU);
+    Uref = localTO(eye(3), [0; 0; -1]);
+    devU = norm(U - Uref, 'fro');
+    assert(devU < 1e-12, ...
+        'case tool frame should resolve to Trans(0,0,-1 mm), dev %.3e', devU);
     Uinv = core.RigidBodyMath.invT(U);
-    fprintf('  [3] tool frame resolved: U = Ry(45°) (dev %.2e)\n', devU);
+    fprintf('  [3] tool frame resolved: U = Trans(0,0,-1 mm) (dev %.2e)\n', devU);
 
     % ---- [4] compute layer: tool-world pose sequence ----
     seq = solver.buildPoseSequence(e, Q, names, 'Anchor', 'tool', ...
@@ -157,18 +159,19 @@ function test_animation_m_rex_3t2r_v00()
     end
     % zero configuration through the same pipeline (frame 1 of the demo is
     % NOT the exact zero pose — position offset (RC,0,0) and z=0):
-    % tip in tool world = U⁻¹ ⇒ the −45° pipette tilt
+    % tip in tool world = U⁻¹ ⇒ the +1 mm Z tool offset
     seq0 = solver.buildPoseSequence(e, zeros(1, numel(names)), names, ...
         'Anchor', 'tool', 'ToolTransform', U);
     devZero = norm(seq0.Frames{1}(seq0.RootFrame) ...
-        - localTO(core.RigidBodyMath.roty(-pi/4), [0; 0; 0]), 'fro');
+        - localTO(eye(3), [0; 0; 1]), 'fro');
     assert(devTip < 1e-9, 'tool-world tip path deviates from U⁻¹·D_k (%.3e)', devTip);
     assert(devTrail < 1e-9, 'tool-world trail deviates (%.3e)', devTrail);
-    assert(devZero < 1e-9, 'zero pose should show the −45° tilt (dev %.3e)', devZero);
+    assert(devZero < 1e-9, ...
+        'zero pose should show the +1 mm Z offset (dev %.3e)', devZero);
     assert(devG < 1e-9, 'ground frame wanders in the tool world (dev %.3e)', devG);
     assert(seq.BranchGapMax < 1e-9, 'ground-branch gap %.3e', seq.BranchGapMax);
     fprintf(['  [4] tool-world sequence: tip dev = %.2e, trail dev = %.2e, ' ...
-        'zero-pose tilt dev = %.2e, ground drift = %.2e, branch gap = %.2e\n'], ...
+        'zero-pose offset dev = %.2e, ground drift = %.2e, branch gap = %.2e\n'], ...
         devTip, devTrail, devZero, devG, seq.BranchGapMax);
 
     % ---- [5] solver cross-check: residual + tool-frame reporting ----
