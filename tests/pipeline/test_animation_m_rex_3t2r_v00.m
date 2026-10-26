@@ -23,7 +23,7 @@ function test_animation_m_rex_3t2r_v00()
 %   Checks:
 %     [1] symbolic pipeline + bindings (rot(P_L) == rot(P_R))
 %     [2] closed form built: rotation-family exactness on BOTH branches +
-%         travel envelope (20/20/30 mm) + tool-axis sweep on the unit sphere
+%         travel envelope (10/10/15 mm) + tool-axis sweep on the unit sphere
 %     [3] solver config: v00 execution config resolves U = Trans(0,0,-1 mm)
 %     [4] compute layer: solver.buildPoseSequence('Anchor','tool') — tip path
 %         = U⁻¹·D_k, zero pose shows the +1 mm Z tool offset, grounds static,
@@ -43,10 +43,12 @@ function test_animation_m_rex_3t2r_v00()
     addpath(genpath(fullfile(rootDir, 'scripts', 'matlab')));
 
     % ---- demo trajectory parameters (tool frame rolling on a sphere) ----
-    rollA1Deg = 22;    % q1 (Rz roll) lissajous amplitude    [deg]
-    rollA2Deg = 16;    % q2 (Rx roll) lissajous amplitude    [deg]
-    RC        = 4.5;   % XY circle radius                    [mm]
-    zAmp      = 1.8;   % z bob amplitude (3rd translation)   [mm]
+    rollA1Deg = 9;     % q1 (Rz roll) lissajous amplitude    [deg]
+    rollA2Deg = 8;     % q2 (Rx roll) lissajous amplitude    [deg]
+    RC        = 3;     % XY circle radius                    [mm]
+    zAmp      = 1.2;   % z bob amplitude (3rd translation)   [mm]
+                       % (9/8 deg + r=3 + z bob keeps the manip
+                       %  travel within the ±10/±10/±15 mm envelope)
     nFrames   = 60;    % frames per loop
     fps       = 30;    % playback speed
 
@@ -116,16 +118,16 @@ function test_animation_m_rex_3t2r_v00()
         axTilt = max(axTilt, acosd(min(1, abs(R_tip(3, 3)))));
     end
 
-    % manipulator travel envelope (real stroke 20/20/30 mm)
+    % manipulator travel envelope (real stroke ±10 mm in X/Y, ±15 mm in Z)
     trav = abs(Q(:, 1:6));
     mX = max([trav(:, 1); trav(:, 4)]);
     mY = max([trav(:, 2); trav(:, 5)]);
     mZ = max([trav(:, 3); trav(:, 6)]);
-    assert(mX <= 20 && mY <= 20 && mZ <= 30, ...
+    assert(mX <= 10 && mY <= 10 && mZ <= 15, ...
         'manipulator travel envelope exceeded (%.2f/%.2f/%.2f).', mX, mY, mZ);
     assert(maxFamDev < 1e-9, 'rotation-family exactness deviates (%.3e).', maxFamDev);
     fprintf(['  [2] closed form built: family dev = %.1e (both branches); ' ...
-        'max travel |dx|=%.2f |dy|=%.2f |dz|=%.2f mm (limits 20/20/30); ' ...
+        'max travel |dx|=%.2f |dy|=%.2f |dz|=%.2f mm (limits 10/10/15); ' ...
         'tool-axis sweep <= %.1f deg\n'], maxFamDev, mX, mY, mZ, axTilt);
 
     % ---- [3] solver config: case tool frame resolves to U = Trans(0,0,-1) ----

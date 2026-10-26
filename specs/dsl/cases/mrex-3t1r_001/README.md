@@ -98,9 +98,9 @@ flowchart TD
 **demo 轨迹的规定位置**：轨迹不在任何 `execution-config*.yaml` 里——它由测试脚本顶部参数区定义，
 经闭式构造展开成关节轨迹矩阵 `Q` 后传入动画/求解器（与 single-closed-loop 测试内联轨迹同例）：
 
-- φ（tip 绕 X 旋转）：−28° → +28°（28° 按 20/20/30 mm 实机行程标定；30° 时 dy 会达 20.2 mm）
-- 位姿平移：XY 平面圆，半径 5 mm，一圈；θ(ry) = ψ(rz) = 0 锁定 —— RCM (x, y, z, φ) 任务模式
-- 60 帧 @ 15 fps
+- φ（tip 绕 X 旋转）：−14° → +14°（14° 按实机行程 X/Y ±10 mm、Z ±15 mm 标定；16° 时 dy 会达 10.4 mm）
+- 位姿平移：XY 平面圆，半径 4 mm，一圈；θ(ry) = ψ(rz) = 0 锁定 —— RCM (x, y, z, φ) 任务模式
+- 60 帧 @ 30 fps
 
 **闭式构造（无 IK）**：
 
@@ -116,7 +116,7 @@ $\mathbf{p}_{\text{swing}}$ 为单铰链偏转、Manipulator 零位时的 tip �
 |------|------|
 | 闭式轨迹 vs 目标（60 帧，全 6 自由度） | max‖E−D‖ = 1.9e-14 |
 | ClosureSolver 残差（全 12 分量，采样 5 帧） | max\|r\| = 1.7e-14（无 NaN） |
-| Manipulator 行程 | \|dx\|≤13.1、\|dy\|≤18.8、\|dz\|≤7.3 mm（≤ 20/20/30） |
+| Manipulator 行程 | \|dx\|≤6.98、\|dy\|≤9.54、\|dz\|≤5.51 mm（≤ ±10/±10/±15） |
 | 动画分支一致性（两 ground 互差） | max = 2.2e-14 |
 
 > `execution-config.yaml`（原 `execution-config-3t1r.yaml`，配置合并后更名）= 3T1R

@@ -23,7 +23,7 @@ function test_animation_m_rex_3t1r()
 %
 %   Checks:
 %     [1] symbolic pipeline + bindings (rot(P_L) == rot(P_R))
-%     [2] closed-form demo trajectory built; travel envelope 20/20/30 mm
+%     [2] closed-form demo trajectory built; travel envelope 10/10/15 mm
 %     [3] solver config: case tool_frame resolves to U = Ry(45°)
 %     [4] compute layer: solver.buildPoseSequence('Anchor','tool') — tool-world
 %         display: tip path = U⁻¹·D_k, zero pose shows the −45° pipette tilt,
@@ -43,9 +43,9 @@ function test_animation_m_rex_3t1r()
     addpath(genpath(fullfile(rootDir, 'scripts', 'matlab')));
 
     % ---- demo trajectory parameters (the prescribed demo motion) ----
-    phiMaxDeg = 28;    % phi sweep: -phiMaxDeg .. +phiMaxDeg [deg]
-                       % (28 deg keeps manip travel within the 20/20/30 envelope)
-    RC        = 5;     % circle radius                         [mm]
+    phiMaxDeg = 14;    % phi sweep: -phiMaxDeg .. +phiMaxDeg [deg]
+                       % (14 deg keeps manip travel within the 10/10/15 envelope)
+    RC        = 4;     % circle radius                         [mm]
     nFrames   = 60;    % frames per loop
     fps       = 30;    % playback speed
 
@@ -103,15 +103,15 @@ function test_animation_m_rex_3t1r()
         D{k} = [localRx(phi), p; 0 0 0 1];
     end
 
-    % manipulator travel envelope (real stroke 20/20/30 mm)
+    % manipulator travel envelope (real stroke ±10 mm in X/Y, ±15 mm in Z)
     trav = abs(Q(:, 1:6));
     mX = max([trav(:, 1); trav(:, 4)]);
     mY = max([trav(:, 2); trav(:, 5)]);
     mZ = max([trav(:, 3); trav(:, 6)]);
-    assert(mX <= 20 && mY <= 20 && mZ <= 30, ...
+    assert(mX <= 10 && mY <= 10 && mZ <= 15, ...
         'manipulator travel envelope exceeded (%.2f/%.2f/%.2f).', mX, mY, mZ);
     fprintf(['  [2] closed form built: max travel |dx|=%.2f |dy|=%.2f |dz|=%.2f mm ' ...
-        '(limits 20/20/30)\n'], mX, mY, mZ);
+        '(limits 10/10/15)\n'], mX, mY, mZ);
 
     % ---- [3] solver config: case tool frame resolves to U = Ry(45°) ----
     cfg = ir.ExecutionConfig(execFile, e.SymbolRegistry, e.EdgeGraph_);

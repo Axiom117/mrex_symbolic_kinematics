@@ -1,5 +1,35 @@
-# Zero-pose joint variable config for the engine (``evaluateNumeric``).
-# Layout: instance name -> variable (revolute: q; prismatic: dx/dy/dz).
-# Unlisted variables default to zero.  Uncomment to stage a pose, e.g.:
-# joint_1:
-#   q: 0.5236
+# 3T2R M-REx 机构可视化配置（阶段 A.2.5）
+# Per-instance joint-variable overrides for viz/mechanism.m.
+#
+# 结构：实例名 → 关节变量取值映射。
+#   顶层键 = DSL instances 中的实例名（如 joint_1）。
+#   二层键 = 该实例模块内关节的 variable 名：
+#     Manipulator → dx/dy/dz（prismatic，单位 mm）
+#     Joint       → q（revolute，单位 rad）
+#
+# 未列出的关节变量默认取 0（零位）。几何参数（cubeLength、tipDistance 等）
+# 不在此文件中，仍由 <module_library>/config/dimensions.yaml 按 module_type 提供。
+#
+# 全部关节保持零位（q=0, dx=dy=dz=0）：Manipulator 各轴无平移，
+# Joint 处于展开零位（linkA 与 linkB 重合，关节恒等变换），满足
+# modeling-conventions.md §2.4 的初始零位条件。
+
+# --- 左侧 Manipulator：三轴笛卡尔驱动零位 ---
+manipulator_L:
+  dx: 0
+  dy: 0
+  dz: 0
+
+# --- 右侧 Manipulator：三轴笛卡尔驱动零位 ---
+manipulator_R:
+  dx: 0
+  dy: 0
+  dz: 0
+
+# --- 第一转动副：展开零位（q=0 时 hingeA≡hingeB，关节恒等）---
+joint_1:
+  q: 0
+
+# --- 第二转动副：展开零位 ---
+joint_2:
+  q: 0

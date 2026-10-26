@@ -105,11 +105,12 @@ flowchart TD
 `tests/pipeline/test_animation_m_rex_3t2r.m`。
 
 **demo 轨迹（闭式构造，无 IK / 无 fmincon）**——tool frame 的姿态扫过精确的两参数旋转族
-（tip 轴向在单位球面上滚动，扫角 ≤ 25.8°），位置同时走小三维路径（覆盖 3 个平移自由度）：
+（tip 轴向在单位球面上滚动，扫角 ≤ 16.4°），位置同时走小三维路径（覆盖 3 个平移自由度）：
 
-- **滚动（2R）**：$R_{tip}(t) = R_y(-q_1(t))\,R_x(q_2(t))$，$q_1 = 24°\sin(2\pi t)$、
-  $q_2 = 18°\sin(4\pi t)$（Lissajous——两转轴同步变化，tip 轴向在球面划出闭合曲线）；
-- **位置（3T）**：XY 平面圆（半径 5 mm）+ z 方向 ±2 mm 起伏；
+- **滚动（2R）**：$R_{tip}(t) = R_y(-q_1(t))\,R_x(q_2(t))$，$q_1 = 16°\sin(2\pi t)$、
+  $q_2 = 10°\sin(4\pi t)$（Lissajous——两转轴同步变化，tip 轴向在球面划出闭合曲线）；
+- **位置（3T）**：XY 平面圆（半径 4.5 mm）+ z 方向 ±1.8 mm 起伏；
+  （振幅按实机行程 X/Y ±10 mm、Z ±15 mm 标定：dy 是约束项，$q_2$ 振幅 12° 时 dy 已达 11.2 mm）
 - **镜像闭合**：$q_3 = -q_2$、$q_4 = -q_1$——左右两支的旋转族 $R_y(a)R_x(b)$ 是同一集合；
 - **平移补偿**：$\mathbf{d}_{L/R} = R_{bind}^{\top}(\mathbf{p} - \mathbf{p}_{swing}^{L/R})$，
   $R_{bind} = \mathrm{rot}(P_L) = \mathrm{rot}(P_R)$，$\mathbf{p}_{swing}^{L/R}$ 由编译位姿函数求值。
@@ -118,11 +119,11 @@ flowchart TD
 
 | 检查项 | 结果 |
 |------|------|
-| 旋转族精确性（$R_{tip}$ vs 左支 FK，60 帧） | max dev = 3.3e-16 |
-| Manipulator 行程 | \|dx\|≤14.3、\|dy\|≤14.9、\|dz\|≤18.3 mm（≤ 20/20/30） |
-| ClosureSolver 残差（采样 5 帧，全 12 分量） | max \|r\| = 3.5e-14（无 NaN） |
-| tool-world 序列契约（tip / trail / grounds） | max dev ≤ 2.6e-14；分支 gap 2.2e-14 |
-| evalToolPose vs $U^{-1} \cdot D_k \cdot U$ | dev = 1.9e-14 |
+| 旋转族精确性（$R_{tip}$ vs 左支 FK，60 帧） | max dev = 3.1e-16 |
+| Manipulator 行程 | \|dx\|≤9.39、\|dy\|≤9.59、\|dz\|≤12.23 mm（≤ ±10/±10/±15） |
+| ClosureSolver 残差（采样 5 帧，全 12 分量） | max \|r\| = 2.4e-14（无 NaN） |
+| tool-world 序列契约（tip / trail / grounds） | max dev ≤ 2.0e-14；分支 gap 2.7e-14 |
+| evalToolPose vs $U^{-1} \cdot D_k \cdot U$ | dev = 3.2e-14 |
 
 ## 说明
 
