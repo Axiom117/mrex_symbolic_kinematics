@@ -55,7 +55,7 @@ classdef ClosureSolver < handle
 %       cs.setToolTarget(deltaTool);       % world-axis increment, tool frame
 %       D = cs.evalToolPose(x_opt);        % achieved tool pose in world
 %
-%   See also: +ir/EdgeGraph, +ir/ExecutionConfig, +solver/KinematicModel
+%   See also: +ir/EdgeGraph, +ir/ExecutionConfig, +solver/exportKinematics
 
     % ---- public read-only properties ----
     properties (SetAccess = private)

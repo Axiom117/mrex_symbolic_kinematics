@@ -3,7 +3,7 @@
 %
 % Pipeline:
 %   1. Define reference joint configuration (known to satisfy closure)
-%   2. FK: compute end-frame pose from reference joint values via KinematicModel
+%   2. FK: compute end-frame pose from reference joint values via Expander symbolic poses
 %   3. IK: solve for joint values from the target pose via ClosureSolver.solveIKWithTarget
 %   4. Compare solved joint values to reference values
 %   5. Verify closure + pose residuals at solution
@@ -69,9 +69,9 @@ fprintf('   PASS: reference config is a valid closed configuration.\n');
 endFrame = 'frame_link_D2.frame_hyper_cube';
 fprintf('\n5. FK: computing T_target = FK(q_ref) for endFrame="%s" ...\n', endFrame);
 
-% Build KinematicModel for FK along the spanning tree
-km = solver.KinematicModel(eSym.EdgeGraph_, endFrame, eSym.JointVarMap);
-T_target = km.eval(qRef);  % 4×4 double
+% FK along the spanning tree from the Expander's symbolic poses
+posesRef = eSym.evaluateNumericDirect(qRef, {endFrame});
+T_target = posesRef(endFrame);  % 4×4 double
 
 fprintf('   T_target (world → endFrame):\n');
 fprintf('   Position: [%+.4f, %+.4f, %+.4f] mm\n', T_target(1,4), T_target(2,4), T_target(3,4));
@@ -122,7 +122,8 @@ qSolved = containers.Map();
 for i = 1:numel(cs.UnknownNames)
     qSolved(cs.UnknownNames{i}) = x_solved(i);
 end
-T_solved = km.eval(qSolved);
+posesSolved = eSym.evaluateNumericDirect(qSolved, {endFrame});
+T_solved = posesSolved(endFrame);
 T_diff = T_target \ T_solved;  % should be ≈ I
 poseErr = norm(T_diff(1:3,4)) + norm(T_diff(1:3,1:3) - eye(3), 'fro');
 fprintf('pose error = %.3e\n', poseErr);

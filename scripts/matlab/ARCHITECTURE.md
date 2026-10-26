@@ -34,7 +34,6 @@ graph TB
     %% ── 求解层 ──
     subgraph solver_layer["+solver/ 求解层"]
         direction LR
-        kinmodel["<b>KinematicModel</b><br/>符号 FK 薄封装<br/>eval + 问题构造"]
         closuresolver["<b>ClosureSolver</b><br/>闭环残差<br/>+ fmincon 求解"]
         buildseq["<b>buildPoseSequence</b><br/>位姿序列产物<br/>Q → PoseFrames"]
     end
@@ -55,15 +54,13 @@ graph TB
     expander   -->|"持有 EdgeGraph_ 句柄"| edgegraph
     edgegraph  -->|"exportEdges() → propagatePoses()"| poseprop
     expander   -.->|"输出 SymbolRegistry"| execcfg
-    execcfg    --> kinmodel
     execcfg    --> closuresolver
-    kinmodel   -.->|"读取 sym 位姿"| edgegraph
     closuresolver -->|"读取 sym 位姿 + 残差"| edgegraph
     mod        -->|"直接操作"| edgegraph
 
     class mech,mod,anim,play,scenespec viz
     class expander,edgegraph,execcfg ir
-    class kinmodel,closuresolver,buildseq solver
+    class closuresolver,buildseq solver
     class poseprop core
 ```
 
@@ -74,8 +71,7 @@ graph TB
 > 4. `EdgeGraph.propagate()` 委托 `PosePropagator.propagatePoses()` 执行纯数学 FK
 > 5. `module.m` 跳过 Expander，直接调用 `EdgeGraph` 方法构建单模块内部图
 > 6. `Expander` 输出 `SymbolRegistry` → `ExecutionConfig` 交叉校验
-> 7. `KinematicModel` 是符号 FK 的独立入口，直接读取 `EdgeGraph` 传播结果
-> 8. `ClosureSolver` 从 `EdgeGraph` 取符号位姿构建闭环残差，通过 `fmincon` 求解
+> 7. `ClosureSolver` 从 `EdgeGraph` 取符号位姿构建闭环残差，通过 `fmincon` 求解
 
 ## 各层职责
 
@@ -100,7 +96,6 @@ graph TB
 
 ### 求解层 (`+solver/`)
 
-- **`KinematicModel`** (handle class): 符号 FK 薄封装。从 `EdgeGraph` 抽取末端 frame 的 `TSym` → 拆解 `PosExpr` / `RotExpr` → 提供 `eval(vals)` 和 `formulatePoseProblem(cfg)`。
 - **`ClosureSolver`** (handle class): 闭环约束构造器。支持两类 closure cut——L2 双 frame 切口与 L3 world 锚定切口（`anchor: world`，`world_binding` 零位自动标定）——构建 6-DOF 符号残差 → `matlabFunction` 编译 → `fmincon` SQP 求解 IK；`setTipTarget(ΔT)` 注入 tip 任务目标，known 关节值经构造参数代换。
 - **`buildPoseSequence`** (函数): FK 位姿序列构建器（A.5.2.0）。`Q` → 逐帧全体 frame 位姿（`PoseSequence`，可选世界锚定共轭）——「求解器 → 位姿数据 → 渲染」数据流中的计算层产物。
 
@@ -179,7 +174,7 @@ flowchart TD
 
 ## 运动学生成核心管线：从 DSL 到 IK/FK 算子
 
-本节详细阐述一份机构描述 DSL 是如何被编译为中间表示（IR），并最终由 `ClosureSolver` 与 `KinematicModel` 编译为可计算的 FK/IK 函数的全过程。
+本节详细阐述一份机构描述 DSL 是如何被编译为中间表示（IR），并最终由 `ClosureSolver` 编译为可计算的闭环 FK/IK 函数的全过程。
 
 ### 1. 核心流程演进（四阶段生命周期）
 
@@ -304,7 +299,7 @@ FK 传播是无状态的纯数学运算——输入边 + 种子位姿 → 输出
 
 ### 符号/数值分离 (A.4.0)
 
-Expander 构造函数**始终**产生符号位姿（`Poses` 为 `frame → 4×4 sym`）。数值代入延迟到 `evaluateNumeric()` 时。这使同一份符号展开结果可被多次数值化（不同配置、动画逐帧），且 `KinematicModel` 和 `ClosureSolver` 可直接消费符号表达式。
+Expander 构造函数**始终**产生符号位姿（`Poses` 为 `frame → 4×4 sym`）。数值代入延迟到 `evaluateNumeric()` 时。这使同一份符号展开结果可被多次数值化（不同配置、动画逐帧），且 `ClosureSolver` 等下游求解器可直接消费符号表达式。
 
 ### closed_mate 与闭环处理
 

@@ -43,7 +43,7 @@ classdef ExecutionConfig
 %       % cfg.getSolvingDirection()   — 'FK' or 'IK'
 %       % [knownV, unknownV] = cfg.partitionVariables();
 %
-%   See also: +ir/Expander, +solver/KinematicModel, +ir/EdgeGraph
+%   See also: +ir/Expander, +ir/EdgeGraph, +solver/ClosureSolver
 
     % ---- public read-only properties ----
     properties (SetAccess = private)

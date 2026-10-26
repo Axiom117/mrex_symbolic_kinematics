@@ -211,8 +211,6 @@ function test_closure_solver_m_rex_3t1r()
     assert(devI < 1e-6, 'baseline Jacobian should match I₆ (A.4b metric)');
 
     % ---- [12] fmincon IK + world-rooted FK cross-verification ----
-    kmL = solver.KinematicModel(e.EdgeGraph_, 'manipulator_L.ground', e.JointVarMap);
-    kmR = solver.KinematicModel(e.EdgeGraph_, 'manipulator_R.ground', e.JointVarMap);
     P_L = cs.ClosureCuts(1).T_bind;
     P_R = cs.ClosureCuts(2).T_bind;
 
@@ -268,8 +266,10 @@ function test_closure_solver_m_rex_3t1r()
         for i = 1:numel(cs.UnknownNames)
             qMapC(cs.UnknownNames{i}) = x(i);
         end
-        E_Lc = P_L * core.RigidBodyMath.invT(kmL.eval(qMapC));
-        E_Rc = P_R * core.RigidBodyMath.invT(kmR.eval(qMapC));
+        E_Lc = P_L * core.RigidBodyMath.invT( ...
+            localEvalFrame(e, qMapC, 'manipulator_L.ground'));
+        E_Rc = P_R * core.RigidBodyMath.invT( ...
+            localEvalFrame(e, qMapC, 'manipulator_R.ground'));
         errLc = norm(E_Lc - T, 'fro');
         errRc = norm(E_Rc - T, 'fro');
         fprintf(['  [12] %-15s |r| = %.3e  fval = %.3e  ' ...
@@ -310,8 +310,8 @@ function test_closure_solver_m_rex_3t1r()
     for i = 1:numel(cs.UnknownNames)
         qMap(cs.UnknownNames{i}) = bestX(i);
     end
-    T_nL = kmL.eval(qMap);   % T_tip←g_L at the solved configuration
-    T_nR = kmR.eval(qMap);   % T_tip←g_R at the solved configuration
+    T_nL = localEvalFrame(e, qMap, 'manipulator_L.ground');  % T_tip←g_L
+    T_nR = localEvalFrame(e, qMap, 'manipulator_R.ground');  % T_tip←g_R
     E_L = P_L * core.RigidBodyMath.invT(T_nL);   % T_W←tip from L branch
     E_R = P_R * core.RigidBodyMath.invT(T_nR);   % T_W←tip from R branch
     errL  = norm(E_L - D, 'fro');
@@ -337,6 +337,12 @@ function test_closure_solver_m_rex_3t1r()
 end
 
 %% ---- local helpers ----
+
+function T = localEvalFrame(e, qMap, frameName)
+%LOCALEVALFRAME  Numeric FK for one frame via the Expander's symbolic poses.
+    poses = e.evaluateNumericDirect(qMap, {frameName});
+    T = poses(frameName);
+end
 
 function e6 = poseError6(T)
 %POSEERROR6  Z-Y-X pose error decomposition (mirrors ClosureSolver local fn).

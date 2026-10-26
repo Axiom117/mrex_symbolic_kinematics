@@ -9,7 +9,7 @@
 
 ## 1. 概述
 
-`symbolRegistry` 是 IR 展开阶段收集的**扁平符号变量清单**。它汇总机构中所有标记为 `observable: true` 的 frame 和 joint variable，以实例限定名（instance-qualified name）作为唯一标识。下游消费者（`ExecutionConfig`、`KinematicModel`、A.5 求解器）通过 `symbolRegistry` 了解「机构中有哪些量可以参与求解」，而不需要遍历整个 IR 图。
+`symbolRegistry` 是 IR 展开阶段收集的**扁平符号变量清单**。它汇总机构中所有标记为 `observable: true` 的 frame 和 joint variable，以实例限定名（instance-qualified name）作为唯一标识。下游消费者（`ExecutionConfig`、`ClosureSolver`、A.5 求解器）通过 `symbolRegistry` 了解「机构中有哪些量可以参与求解」，而不需要遍历整个 IR 图。
 
 ### 1.1 变量来源
 

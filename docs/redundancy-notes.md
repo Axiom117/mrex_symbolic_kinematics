@@ -46,7 +46,7 @@
 
 **重叠本质**：`ARCHITECTURE.md` 的「运动学核心概念 —— DSL 可视化运作原理」节（约 150 行）展开讲解了 mate 变换公式、生成树/弦边策略、`kind` 过滤机制、FK 传播算法细节、mate gap/Zdot 诊断。这些内容在 `edge-types.md`（边类型）、`port-attachment.md`（mate 边表示）、`dsl-to-ir-mapping.md`（映射管线）中也有详细展开，且 IR spec 是权威来源。
 
-**精简策略**：`ARCHITECTURE.md` 的该节应精简为「概念概述 + 指路到 IR spec」——每个概念给 2-3 句概述后直接链接到对应的 IR 文档节号。删除已在 IR spec 中详细展开的公式、代码片段、诊断公式。保留 `ARCHITECTURE.md` 独有的内容：设计决策（为什么 exportEdges 剥离元数据、为什么 PosePropagator 保持独立、为什么 KinematicModel 是薄封装）。优先级：**高**。
+**精简策略**：`ARCHITECTURE.md` 的该节应精简为「概念概述 + 指路到 IR spec」——每个概念给 2-3 句概述后直接链接到对应的 IR 文档节号。删除已在 IR spec 中详细展开的公式、代码片段、诊断公式。保留 `ARCHITECTURE.md` 独有的内容：设计决策（为什么 exportEdges 剥离元数据、为什么 PosePropagator 保持独立、为什么 ClosureSolver 独立于 Expander）。优先级：**高**。
 
 ---
 

@@ -365,6 +365,8 @@ flowchart LR
 
 #### A.3.2 · 符号 FK 引擎：数值传播 → 符号表达式
 
+> **后续变更（2026-10-20）**：`+solver/KinematicModel.m` 已移除。符号位姿仍由 `Expander.Poses` 提供，数值 FK 使用 `evaluateNumericDirect()`；闭环 FK/IK 统一走 `ClosureSolver`。本节保留为历史设计记录。
+
 目标：在现有数值 FK 传播基础上，增加符号表达式生成能力。这是 A.3 的**核心增量**——之前所有工作都是数值的，现在要产出符号表达式供 A.5 接入 `fmincon`。
 
 具体任务：
@@ -426,7 +428,7 @@ flowchart LR
 > **闭环说明**：single-closed-loop 含 `closed: true` 边，其符号 FK 仅沿生成树传播（弦边不参与），因此末端位姿表达式是「开环近似」，不代表闭环约束下的真实位姿。闭环约束构造由 A.4 承接。A.3 只需保证闭环机构的 IR 图展开正确、生成树 FK 可计算。
 
 > **A.3.4 已删去**：原 A.3.4 要求的 `+ir/Validator.m`（IR 结构校验器）和管线对比测试在实际开发中已被证明不需要作为独立阶段：
-> - 管线端到端测试已被 `test_symbolic_fk_*.m` 和 `test_execution_config_*.m` 覆盖
+> - 管线端到端测试已被 `test_execution_config_*.m` 等覆盖
 > - 符号 FK vs 数值 FK 对比是循环论证（两者使用同一套 `PosePropagator` 引擎）
 > - 手工推导运动学公式验证的前提条件不满足（尚无手工推导的 case）
 > - IR 结构完整性由 `Expander` 构造过程保证（construction guarantees correctness）

@@ -17,7 +17,7 @@ classdef Expander < handle
 %       % e.MechName, e.Instances, e.ConnectionInfo, e.Poses, e.LibDir,
 %       % e.JointVarMap, e.EdgeGraph_
 %
-%   See also: +ir/EdgeGraph, +viz/mechanism, +core/PosePropagator, +solver/KinematicModel
+%   See also: +ir/EdgeGraph, +viz/mechanism, +core/PosePropagator, +solver/ClosureSolver
 
     % ---- public read-only properties ----
     properties (SetAccess = private)
@@ -29,7 +29,7 @@ classdef Expander < handle
         JointVarMap                       % containers.Map: canonical var name (e.g. 'joint1.q') → symbolic handle
         JointValues                       % containers.Map: canonical var name → numeric value (populated by evaluateNumeric)
         SymbolRegistry (:,1) struct          % struct array: name, type (geometric/joint/task), symHandle, scope, module_type, instance
-        EdgeGraph_                          % ir.EdgeGraph handle (public read for solver.KinematicModel)
+        EdgeGraph_                          % ir.EdgeGraph handle (public read for downstream consumers)
     end
 
     % ---- private properties ----

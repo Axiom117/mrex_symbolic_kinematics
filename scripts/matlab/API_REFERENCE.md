@@ -12,7 +12,6 @@
 | `+ir/` | [EdgeGraph](#edgegraph) | handle 类 | 位姿图 IR 累积器 |
 | `+ir/` | [Expander](#expander) | handle 类 | DSL→IR 编排器（核心管线） |
 | `+ir/` | [ExecutionConfig](#executionconfig) | value 类 | L3 执行配置与变量分区 |
-| `+solver/` | [KinematicModel](#kinematicmodel) | handle 类 | 符号 FK 薄封装 + 问题构造 |
 | `+solver/` | [ClosureSolver](#closuresolver) | handle 类 | 闭环残差构造 + fmincon 求解 |
 | `+solver/` | [buildPoseSequence](#buildposesequence) | 函数 | FK 位姿序列构建（Q → PoseFrames） |
 | `+solver/` | [exportKinematics](#exportkinematics) | 函数 | 自包含模型包导出（编译器 → 模型包） |
@@ -110,7 +109,7 @@ poses = g.propagate();  % containers.Map: frame → 4×4 sym
 | `JointVarMap` | `containers.Map` | canonical name（如 `'joint1.q'`）→ `sym` handle |
 | `JointValues` | `containers.Map` | canonical name → `double`（最近一次数值代入的快照） |
 | `SymbolRegistry` | `struct array` | 字段: `name`, `type`（`'joint'`/`'task'`/`'geometric'`）, `symHandle`, `scope`, `module_type`, `instance` |
-| `EdgeGraph_` | `ir.EdgeGraph` | 内部位姿图句柄（供 `solver.KinematicModel` 等下游消费） |
+| `EdgeGraph_` | `ir.EdgeGraph` | 内部位姿图句柄（供求解器/导出管线等下游消费） |
 
 #### Public Methods
 
@@ -153,13 +152,12 @@ e = ir.Expander('../../specs/dsl/cases/open-chain-2r/robot_description.yaml');
 posesNum = e.evaluateNumeric('../../specs/dsl/cases/open-chain-2r/joint_config.yaml');
 
 % 下游消费
-km = solver.KinematicModel(e.EdgeGraph_, 'pipette.tip_origin');
 cfg = ir.ExecutionConfig('exec-config.yaml', e.SymbolRegistry, e.EdgeGraph_);
 ```
 
 #### See Also
 
-`+ir/EdgeGraph`, `+ir/ExecutionConfig`, `+solver/KinematicModel`, `+viz/mechanism`
+`+ir/EdgeGraph`, `+ir/ExecutionConfig`, `+solver/ClosureSolver`, `+viz/mechanism`
 
 ---
 
@@ -227,68 +225,11 @@ dir = cfg.getSolvingDirection();        % 'FK' or 'IK'
 
 #### See Also
 
-`+ir/Expander`, `+solver/KinematicModel`, `+solver/ClosureSolver`
+`+ir/Expander`, `+solver/ClosureSolver`
 
 ---
 
 ## +solver/ 求解层
-
-### KinematicModel
-
-**类型**: `handle` 类  
-**文件**: `+solver/KinematicModel.m`  
-**职责**: 符号 FK 薄封装。从 `EdgeGraph` 的符号位姿 map 中抽取末端 frame 的 `TSym`，拆解为 `PosExpr` / `RotExpr`，提供数值求值和问题构造（FK/IK 位姿残差）。
-
-#### Public Properties
-
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| `TSym` | `4×4 sym` | world→endFrame 齐次变换（符号表达式） |
-| `PosExpr` | `3×1 sym` | 位置分量 `[x; y; z]` |
-| `RotExpr` | `3×3 sym` | 旋转矩阵分量 |
-| `JointVars` | `sym array` | `TSym` 中出现的所有关节符号变量（按 `symvar` 字母序） |
-| `EndFrame` | `char` | 目标 frame 名称 |
-
-#### Public Methods
-
-| 方法 | 签名 | 说明 |
-|------|------|------|
-| `KinematicModel` | `(edgeGraph, endFrame, jointVarMap?)` | 构造函数：调用 `edgeGraph.propagate()` → 抽取 `endFrame` 的 `TSym` |
-| `eval` | `(vals) → 4×4 double` | 代入数值求末端位姿；`vals` 可以是数值向量或 `containers.Map` |
-| `evalPos` | `(vals) → 3×1 double` | 仅求位置分量 |
-| `evalRot` | `(vals) → 3×3 double` | 仅求旋转分量 |
-| `formulatePoseProblem` | `(execConfig, targetPose?) → struct` | 构造 FK/IK 求解问题，返回 `prob.Type`, `prob.eval(vals)`, `prob.JointVarNames` 等 |
-
-#### `formulatePoseProblem` 返回值
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `Type` | `char` | `'FK'`（末端位姿求值）或 `'IK'`（位姿误差残差） |
-| `eval` | `function_handle` | FK: `@(vals) → 4×4 pose`；IK: `@(vals) → 6×1 residual` |
-| `JointVarNames` | `cell array` | 关节变量 canonical name 列表 |
-| `JointVarOrder` | `sym array` | 关节变量在 `eval()` 中的顺序 |
-| `TargetPose` | `4×4 double` | IK 模式下的目标位姿 |
-
-#### 设计要点
-
-- **薄封装**: 不重复 FK 传播逻辑，直接读取 `EdgeGraph.propagate()` 的符号结果。
-- **两种 eval 输入格式**: 数值向量（按 `JointVars` 顺序）或 `containers.Map`（按 canonical name），后者需传入 `JointVarMap`。
-- **位姿误差定义**: IK 模式下使用 6-DOF 误差 `[tx,ty,tz,rx,ry,rz]`（位置差 mm + Z-Y-X Euler 角差 rad），由 `T_des \ T_cur` 分解得到。
-- **不包含闭环约束**: 此方法仅处理末端位姿误差；闭环残差构造使用 `ClosureSolver.buildFullResidual()`。
-
-#### 使用示例
-
-```matlab
-km = solver.KinematicModel(e.EdgeGraph_, 'pipette.tip_origin', e.JointVarMap);
-T = km.eval([0.5236; -0.7854]);             % 数值位姿
-prob = km.formulatePoseProblem(cfg);         % FK 或 IK 问题
-```
-
-#### See Also
-
-`+ir/EdgeGraph`, `+ir/ExecutionConfig`, `+solver/ClosureSolver`
-
----
 
 ### ClosureSolver
 
@@ -387,7 +328,7 @@ Dach = csL3.evalToolPose(x_opt);                  % 工具系实际位姿（≈ 
 
 #### See Also
 
-`+ir/EdgeGraph`, `+ir/ExecutionConfig`, `+solver/KinematicModel`
+`+ir/EdgeGraph`, `+ir/ExecutionConfig`, `+solver/exportKinematics`
 
 ---
 

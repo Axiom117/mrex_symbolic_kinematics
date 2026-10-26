@@ -18,7 +18,7 @@ function test_tool_frame_m_rex_3t1r()
 %     [5] zero pose: evalToolPose(0) ≈ I₄ (world-aligned tool frame); derived
 %         tip initial attitude U⁻¹ = Ry(−45°) matches the design example
 %         ("pipette frame 0,0,0,0,-45°,0"); cross-checked against an
-%         independent KinematicModel world-rooted FK path
+%         independent world-rooted FK path from the Expander's poses
 %     [6] algebraic equivalence: setToolTarget(D) ≡ setTipTarget(U·D·U⁻¹)
 %         (residual equality at a probe configuration)
 %     [7] IK end-to-end with tool targets: (a) +5 mm world-x translation;
@@ -157,8 +157,6 @@ function test_tool_frame_m_rex_3t1r()
         devU, devUtr, devTipTr);
 
     % ---- [5] zero-pose semantics (world-aligned tool frame) ----
-    kmL = solver.KinematicModel(e.EdgeGraph_, 'manipulator_L.ground', e.JointVarMap);
-    kmR = solver.KinematicModel(e.EdgeGraph_, 'manipulator_R.ground', e.JointVarMap);
     cutL = cs.ClosureCuts(strcmp({cs.ClosureCuts.near}, 'manipulator_L.ground'));
     cutR = cs.ClosureCuts(strcmp({cs.ClosureCuts.near}, 'manipulator_R.ground'));
 
@@ -171,13 +169,14 @@ function test_tool_frame_m_rex_3t1r()
     devTip = norm(Uinv - localTO(core.RigidBodyMath.roty(-pi/4), [0; 0; 0]), 'fro');
     assert(devTip < 1e-12, 'derived tip attitude should be Ry(−45°), dev = %.2e', devTip);
 
-    % cross-check evalToolPose(0) against an independent KinematicModel path
+    % cross-check evalToolPose(0) against an independent Expander FK path
     qMap0 = localQMap(cs, zeros(nx, 1));
-    DL0 = Uinv * (cutL.T_bind * core.RigidBodyMath.invT(kmL.eval(qMap0))) * U;
+    T_L0 = localEvalFrame(e, qMap0, 'manipulator_L.ground');
+    DL0 = Uinv * (cutL.T_bind * core.RigidBodyMath.invT(T_L0)) * U;
     devL0 = norm(DL0 - D0, 'fro');
-    assert(devL0 < 1e-9, 'evalToolPose disagrees with KinematicModel path (dev = %.2e)', devL0);
+    assert(devL0 < 1e-9, 'evalToolPose disagrees with Expander FK path (dev = %.2e)', devL0);
     fprintf(['  [5] zero pose: |D(0) − I4| = %.2e; tip attitude U⁻¹ = Ry(−45°) ' ...
-        '(dev = %.2e); km cross-check dev = %.2e\n'], dev0, devTip, devL0);
+        '(dev = %.2e); FK cross-check dev = %.2e\n'], dev0, devTip, devL0);
 
     % ---- [6] algebraic equivalence with conjugated tip targets ----
     Dprobe2 = localTO(core.RigidBodyMath.rotz(pi/12), [2; -1; 3]);
@@ -220,8 +219,10 @@ function test_tool_frame_m_rex_3t1r()
 
     % L/R world-rooted branch agreement at the solution
     qMapB = localQMap(cs, xb);
-    DLb = Uinv * (cutL.T_bind * core.RigidBodyMath.invT(kmL.eval(qMapB))) * U;
-    DRb = Uinv * (cutR.T_bind * core.RigidBodyMath.invT(kmR.eval(qMapB))) * U;
+    T_Lb = localEvalFrame(e, qMapB, 'manipulator_L.ground');
+    T_Rb = localEvalFrame(e, qMapB, 'manipulator_R.ground');
+    DLb = Uinv * (cutL.T_bind * core.RigidBodyMath.invT(T_Lb)) * U;
+    DRb = Uinv * (cutR.T_bind * core.RigidBodyMath.invT(T_Rb)) * U;
     eLRb = norm(DLb - DRb, 'fro');
     fprintf(['  [7b] world-axis (cos45°,0,sin45°) rotation 5°: |r| = %.2e, ' ...
         '|D−D_target| = %.2e, L/R gap = %.2e, tries = %d, exitflag = %d\n'], ...
@@ -254,6 +255,12 @@ function qMap = localQMap(cs, x)
     for i = 1:numel(cs.UnknownNames)
         qMap(cs.UnknownNames{i}) = x(i);
     end
+end
+
+function T = localEvalFrame(e, qMap, frameName)
+%LOCALEVALFRAME  Numeric FK for one frame via the Expander's symbolic poses.
+    poses = e.evaluateNumericDirect(qMap, {frameName});
+    T = poses(frameName);
 end
 
 function localWriteText(outFile, txt)

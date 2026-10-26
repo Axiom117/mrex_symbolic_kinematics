@@ -101,7 +101,7 @@ graph TD
 
 | 文件 | 说明 |
 |------|------|
-| `scripts/matlab/ARCHITECTURE.md` | **MATLAB 代码架构文档**：+viz → +ir（Expander + EdgeGraph + KinematicModel）→ +core（PosePropagator）四层架构、数据流图、设计决策。约 300 行。 |
+| `scripts/matlab/ARCHITECTURE.md` | **MATLAB 代码架构文档**：+viz → +ir（Expander + EdgeGraph）→ +solver（ClosureSolver）→ +core（PosePropagator）四层架构、数据流图、设计决策。约 300 行。 |
 | `scripts/matlab/MODEL_EXPORT.md` | **模型导出文档**：三段式流水线（符号工厂 → 自包含模型包 → 运行引擎）、模型包产物规范（`<case>/generated/`）、E1–E4 实施路线、导出介质对比。约 150 行。 |
 | `scripts/matlab/README.md` | MATLAB 脚本用法说明（单模块可视化、机构装配可视化命令）。 |
 
