@@ -19,12 +19,14 @@ mode: closed_loop
 endFrame: tool_1.tip_origin
 
 # ---- L3 工具坐标系（tool_frame）----
-# 工具系姿态与 tool_1.tip_origin 零位姿态重合，仅沿 tip 的 -Z 平移 1 mm。
-# T_endFrame←tool = Trans(0, 0, -1)（无旋转）；零位时 tip 在该工具系中为 +1 mm Z 偏置。
+# 工具系原点相对 tip 沿其 -Z 平移 1 mm（平移在 endFrame 坐标下给出），
+# 姿态绕 y 轴旋转 +45°（右手定则正向）。
+# T_endFrame←tool = Trans(0, 0, -1) · Ry(+45°)；零位时 tip 在该工具系中为
+# (-0.7071, 0, +0.7071) mm（模长 1 mm）。
 tool_frame:
   transform:
     translation: [0, 0, -1]     # mm，工具系原点相对 endFrame
-    rotation: { rpy: [0, 0, 0] }
+    rotation: { rpy: [0, 45deg, 0] }
 
 world_binding:
   - ground: manipulator_1.ground

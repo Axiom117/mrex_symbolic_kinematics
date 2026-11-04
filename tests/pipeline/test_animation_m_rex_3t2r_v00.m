@@ -24,9 +24,9 @@ function test_animation_m_rex_3t2r_v00()
 %     [1] symbolic pipeline + bindings (rot(P_L) == rot(P_R))
 %     [2] closed form built: rotation-family exactness on BOTH branches +
 %         travel envelope (10/10/15 mm) + tool-axis sweep on the unit sphere
-%     [3] solver config: v00 execution config resolves U = Trans(0,0,-1 mm)
+%     [3] solver config: v00 execution config resolves U = Trans(0,0,-1)·Ry(+45°)
 %     [4] compute layer: solver.buildPoseSequence('Anchor','tool') — tip path
-%         = U⁻¹·D_k, zero pose shows the +1 mm Z tool offset, grounds static,
+%         = U⁻¹·D_k, zero pose shows the 1 mm tool offset at 45°, grounds static,
 %         branch gap ~1e-14
 %     [5] solver cross-check: ClosureSolver residual (setTipTarget) and
 %         evalToolPose (tool-frame reporting) at sampled frames
@@ -130,18 +130,18 @@ function test_animation_m_rex_3t2r_v00()
         'max travel |dx|=%.2f |dy|=%.2f |dz|=%.2f mm (limits 10/10/15); ' ...
         'tool-axis sweep <= %.1f deg\n'], maxFamDev, mX, mY, mZ, axTilt);
 
-    % ---- [3] solver config: case tool frame resolves to U = Trans(0,0,-1) ----
+    % ---- [3] solver config: case tool frame resolves to U = Trans(0,0,-1)·Ry(+45°) ----
     cfg = ir.ExecutionConfig(execFile, e.SymbolRegistry, e.EdgeGraph_);
     cs = solver.ClosureSolver(e.EdgeGraph_, cfg, e.JointVarMap);
     assert(numel(cs.UnknownSyms) == 10, ...
         'expected 10 unknowns (6 manip + 4 hinge), got %d.', numel(cs.UnknownSyms));
     U = cs.ToolTransform;
-    Uref = localTO(eye(3), [0; 0; -1]);
+    Uref = localTO(localRy(45 * pi / 180), [0; 0; -1]);
     devU = norm(U - Uref, 'fro');
     assert(devU < 1e-12, ...
-        'case tool frame should resolve to Trans(0,0,-1 mm), dev %.3e', devU);
+        'case tool frame should resolve to Trans(0,0,-1 mm)*Ry(+45deg), dev %.3e', devU);
     Uinv = core.RigidBodyMath.invT(U);
-    fprintf('  [3] tool frame resolved: U = Trans(0,0,-1 mm) (dev %.2e)\n', devU);
+    fprintf('  [3] tool frame resolved: U = Trans(0,0,-1 mm)*Ry(+45deg) (dev %.2e)\n', devU);
 
     % ---- [4] compute layer: tool-world pose sequence ----
     seq = solver.buildPoseSequence(e, Q, names, 'Anchor', 'tool', ...
@@ -161,11 +161,11 @@ function test_animation_m_rex_3t2r_v00()
     end
     % zero configuration through the same pipeline (frame 1 of the demo is
     % NOT the exact zero pose — position offset (RC,0,0) and z=0):
-    % tip in tool world = U⁻¹ ⇒ the +1 mm Z tool offset
+    % tip in tool world = U⁻¹ ⇒ 1 mm offset at -45° about y: (-√2/2, 0, √2/2)
     seq0 = solver.buildPoseSequence(e, zeros(1, numel(names)), names, ...
         'Anchor', 'tool', 'ToolTransform', U);
     devZero = norm(seq0.Frames{1}(seq0.RootFrame) ...
-        - localTO(eye(3), [0; 0; 1]), 'fro');
+        - localTO(localRy(-pi / 4), [-sqrt(2) / 2; 0; sqrt(2) / 2]), 'fro');
     assert(devTip < 1e-9, 'tool-world tip path deviates from U⁻¹·D_k (%.3e)', devTip);
     assert(devTrail < 1e-9, 'tool-world trail deviates (%.3e)', devTrail);
     assert(devZero < 1e-9, ...
@@ -206,6 +206,11 @@ end
 function R = localRx(a)
 %LOCALRX  Rx(a) — rotation about +X.
     R = [1, 0, 0; 0, cos(a), -sin(a); 0, sin(a), cos(a)];
+end
+
+function R = localRy(a)
+%LOCALRY  Ry(a) — rotation about +Y.
+    R = [cos(a), 0, sin(a); 0, 1, 0; -sin(a), 0, cos(a)];
 end
 
 function R = localRz(a)

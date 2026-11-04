@@ -466,7 +466,7 @@ D = fk_tool(q);           poses = fk_all(q);
 
 ```matlab
 rt = solver.KinematicsRuntime('specs/dsl/cases/mrex_3t2r_v00/generated');
-T  = rt.fk(zeros(10,1));                  % 默认工具位姿（v00: Trans(0,0,-1 mm)）
+T  = rt.fk(zeros(10,1));                  % 默认工具位姿（v00: Trans(0,0,-1 mm)·Ry(+45°)）
 [q, ok] = rt.ik(T);                       % 回到零位
 [d, qint, ok] = rt.ikDrivers(T);           % 前 6 个驱动 + 4 个被动关节
 T2 = rt.fkDrivers(d);                      % 仅由 6 个驱动恢复位姿

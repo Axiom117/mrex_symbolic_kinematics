@@ -42,10 +42,10 @@ function test_kinematics_runtime_m_rex_3t2r_v00()
     assert(isequal(rt.ActuatedIndices, 1:6), 'actuated indices');
     assert(isequal(rt.PassiveIndices, 7:10), 'passive indices');
     assert(norm(rt.C - eye(4), 'fro') < 1e-12, 'C should be I for tip-rooted v00');
-    Uref = localTO(eye(3), [0; 0; -1]);
+    Uref = localTO(localRy(45 * pi / 180), [0; 0; -1]);
     assert(norm(rt.U0 - Uref, 'fro') < 1e-9, ...
-        'U0 should be tip-aligned with a -1 mm Z offset');
-    fprintf('  [1] roles 6+4, U0=Trans(0,0,-1 mm), C=I\n');
+        'U0 should be Ry(+45deg) with a -1 mm Z offset');
+    fprintf('  [1] roles 6+4, U0=Trans(0,0,-1 mm)*Ry(+45deg), C=I\n');
 
     % ---- [2] package FK / default tool FK ----
     qZero = zeros(rt.NQ, 1);

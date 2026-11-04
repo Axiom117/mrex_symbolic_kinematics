@@ -202,7 +202,7 @@ norm(fk_tool(q) - eye(4)) < 1e-12       % 工具系零位
 size(closure_residual_jacobian(q))      % [12 10]，全部有限
 ```
 
-v00 的预期：`U0 = Trans(0, 0, -1 mm)`（工具系姿态与 tip 零位重合）、`C = I₄`、`inputs.roles` 为 6 个 `actuated` + 4 个 `passive`。
+v00 的预期：`U0 = Trans(0, 0, -1 mm) · Ry(+45°)`（工具系原点沿 tip 的 -Z 偏 1 mm，姿态绕 y 轴正向 45°）、`C = I₄`、`inputs.roles` 为 6 个 `actuated` + 4 个 `passive`。
 
 ### 4.3 生成部署包
 
