@@ -98,32 +98,41 @@ flowchart TD
 > 说明：IK 求解轨迹（fmincon 逐帧）尚未编写；动画端到端验证见下节
 > （`tests/pipeline/test_animation_m_rex_3t2r.m`，全绿）。
 
-## 动画（tool frame 球面滚动）
+## 动画（纯 RCM 单轴巡游）
 
 分层播放（A.5.2.0 管线不变）：`solver.buildPoseSequence(e, Q, names, 'Anchor', 'tool', 'ToolTransform', U)`
 → `viz.sceneSpec(e)` → `viz.play(seq, scene, 'Fps', 30)`；端到端测试：
 `tests/pipeline/test_animation_m_rex_3t2r.m`。
 
-**demo 轨迹（闭式构造，无 IK / 无 fmincon）**——tool frame 的姿态扫过精确的两参数旋转族
-（tip 轴向在单位球面上滚动，扫角 ≤ 16.4°），位置同时走小三维路径（覆盖 3 个平移自由度）：
+**demo 轨迹（闭式构造，无 IK / 无 fmincon）**——纯 RCM：tip 固定在零位点
+（$\mathbf{p} \equiv \mathbf{0}$，无平移、无圆轨迹），只做旋转；动画为**单轴巡游**
+（$0 \to +q_1 \to 0 \to +q_2 \to 0 \to -q_1 \to 0 \to -q_2 \to 0$，每段只动一个转轴）：
 
-- **滚动（2R）**：$R_{tip}(t) = R_y(-q_1(t))\,R_x(q_2(t))$，$q_1 = 16°\sin(2\pi t)$、
-  $q_2 = 10°\sin(4\pi t)$（Lissajous——两转轴同步变化，tip 轴向在球面划出闭合曲线）；
-- **位置（3T）**：XY 平面圆（半径 4.5 mm）+ z 方向 ±1.8 mm 起伏；
-  （振幅按实机行程 X/Y ±10 mm、Z ±15 mm 标定：dy 是约束项，$q_2$ 振幅 12° 时 dy 已达 11.2 mm）
+- **旋转族（2R）**：$R_{tip} = R_y(-q_1)\,R_x(q_2)$（全程精确，dev ≈ 4e-16）；
 - **镜像闭合**：$q_3 = -q_2$、$q_4 = -q_1$——左右两支的旋转族 $R_y(a)R_x(b)$ 是同一集合；
 - **平移补偿**：$\mathbf{d}_{L/R} = R_{bind}^{\top}(\mathbf{p} - \mathbf{p}_{swing}^{L/R})$，
-  $R_{bind} = \mathrm{rot}(P_L) = \mathrm{rot}(P_R)$，$\mathbf{p}_{swing}^{L/R}$ 由编译位姿函数求值。
+  $R_{bind} = \mathrm{rot}(P_L) = \mathrm{rot}(P_R)$，$\mathbf{p}_{swing}^{L/R}$ 由编译位姿函数求值；
+- **帧数**：120 帧（每段 15 帧）@ 30 fps。
+
+**各轴最大转动范围（零位、单轴独立标定，不考虑耦合）**——脚本内对编译位姿函数二分求解，
+约束为 Manipulator 实机行程 |dx| ≤ 10、|dy| ≤ 10、|dz| ≤ 15 mm，并断言边界紧致（再 +0.1° 即越限）：
+
+| 转轴 | 行程安全范围 | 先到限的驱动轴 | 其余驱动轴单独可到 |
+|------|------|------|------|
+| $q_1$（Ry roll） | **[-18.420°, +20.520°]**（不对称） | dx（负侧）/ dz（正侧） | dy 行程恒为 0 |
+| $q_2$（Rx roll） | **±15.945°** | dy（两侧） | dx 39.09° / dz 51.80° |
+
+demo 巡游幅度按 0.1° 网格内缩：$q_1 \in [-18.4°, +20.5°]$、$q_2 \in [\pm 15.9°]$。
 
 实测（`test_animation_m_rex_3t2r.m`，MATLAB R2026a 无头）：
 
 | 检查项 | 结果 |
 |------|------|
-| 旋转族精确性（$R_{tip}$ vs 左支 FK，60 帧） | max dev = 3.1e-16 |
-| Manipulator 行程 | \|dx\|≤9.39、\|dy\|≤9.59、\|dz\|≤12.23 mm（≤ ±10/±10/±15） |
+| 旋转族精确性（$R_{tip}$ vs 左支 FK，120 帧） | max dev = 4.0e-16 |
+| Manipulator 行程（巡游全程） | \|dx\|≤9.69、\|dy\|≤9.89、\|dz\|≤14.85 mm（≤ ±10/±10/±15） |
 | ClosureSolver 残差（采样 5 帧，全 12 分量） | max \|r\| = 2.4e-14（无 NaN） |
-| tool-world 序列契约（tip / trail / grounds） | max dev ≤ 2.0e-14；分支 gap 2.7e-14 |
-| evalToolPose vs $U^{-1} \cdot D_k \cdot U$ | dev = 3.2e-14 |
+| tool-world 序列契约（tip / trail / grounds） | max dev ≤ 2.3e-14；分支 gap 2.3e-14 |
+| evalToolPose vs $U^{-1} \cdot D_k \cdot U$ | dev = 8.0e-15 |
 
 ## 说明
 

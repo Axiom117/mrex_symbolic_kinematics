@@ -8,9 +8,17 @@ function test_animation_m_rex_3t1r()
 %
 %   Demo trajectory (DEFINED HERE — the execution-config YAML only declares
 %   L3 execution semantics, not the motion):
-%     - phi (tip X-rotation): -phiMaxDeg .. +phiMaxDeg
-%     - position: XY-plane circle of radius RC (one full turn), z = 0
+%     - phi (tip X-rotation): sweeps the full stroke-safe range about the
+%       ZERO-POSE TIP POINT — a pure RCM rotation: the tip position is held
+%       fixed at the zero-pose point (p ≡ 0), so there is no translation and
+%       no circle.
 %     - theta (Ry) = psi (Rz) = 0  (locked) — the RCM (x, y, z, phi) task mode
+%     - the range is calibrated here (bisection on the compiled pose
+%       functions): the stroke-safe sweep whose six drive axes stay inside the
+%       real Manipulator stroke |dx| <= 10, |dy| <= 10, |dz| <= 15 mm. It is
+%       symmetric, phi ∈ [-15.382, +15.382] deg (the dy drive binds on both
+%       sides; dx / dz would allow 29.096 / 40.256 deg) → the demo sweeps
+%       ±15.3 deg (0.1 deg grid).
 %
 %   The joint trajectory is built in closed form (no IK, no fmincon):
 %     joint_1.q = phi;   joint_2.q = -phi
@@ -23,7 +31,8 @@ function test_animation_m_rex_3t1r()
 %
 %   Checks:
 %     [1] symbolic pipeline + bindings (rot(P_L) == rot(P_R))
-%     [2] closed-form demo trajectory built; travel envelope 10/10/15 mm
+%     [2] pure-RCM sweep limit (bisection, tightness asserted) + closed-form
+%         demo trajectory built; travel envelope ±10/±10/±15 mm
 %     [3] solver config: case tool_frame resolves to U = Ry(45°)
 %     [4] compute layer: solver.buildPoseSequence('Anchor','tool') — tool-world
 %         display: tip path = U⁻¹·D_k, zero pose shows the −45° pipette tilt,
@@ -31,7 +40,8 @@ function test_animation_m_rex_3t1r()
 %     [5] solver cross-check: ClosureSolver residual (setTipTarget) and
 %         evalToolPose (tool-frame reporting) at sampled frames
 %     [6] render layer: viz.sceneSpec + viz.play (pure data consumption) with
-%         the tool triad attached to the root (ExtraFrames)
+%         the tool triad attached to the root (ExtraFrames); the tip trail is
+%         switched off (the tip is a fixed RCM point, no path to draw)
 %
 %   Requires: Symbolic Math Toolbox
 %
@@ -43,15 +53,11 @@ function test_animation_m_rex_3t1r()
     addpath(genpath(fullfile(rootDir, 'scripts', 'matlab')));
 
     % ---- demo trajectory parameters (the prescribed demo motion) ----
-    phiMaxDeg = 14;    % phi sweep: -phiMaxDeg .. +phiMaxDeg [deg]
-                       % (14 deg keeps manip travel within the 10/10/15 envelope)
-    RC        = 4;     % circle radius                         [mm]
+    travelLim = [10 10 15];  % real Manipulator stroke |dx| |dy| |dz| [mm]
     nFrames   = 60;    % frames per loop
     fps       = 30;    % playback speed
 
     fprintf('=== test_animation_m_rex_3t1r (A.5.2.0 layered + tool frame) ===\n');
-    fprintf('Demo trajectory: phi -%d..+%d deg + XY circle r=%d mm, %d frames @ %d fps\n', ...
-        phiMaxDeg, phiMaxDeg, RC, nFrames, fps);
 
     dslFile  = fullfile(rootDir, 'specs', 'dsl', 'cases', 'mrex-3t1r_001', ...
         'robot_description.yaml');
@@ -75,14 +81,25 @@ function test_animation_m_rex_3t1r()
     assert(rotDev < 1e-12, 'ground binding rotations differ (%.3e).', rotDev);
     fprintf('  [1] pipeline OK; rot(P_L) == rot(P_R) (dev %.1e)\n', rotDev);
 
-    % ---- [2] closed-form demo trajectory (Q + tip targets D_k) ----
+    % ---- [2a] pure-RCM sweep limit (largest stroke-safe range) ----
+    travelAt = @(deg) localRcmTravel(deg, e, P_L, P_R, R_bind);
+    [phiLo, phiHi, phiLoB, phiHiB] = localSweepLimit(travelAt, travelLim);
+    % demo sweep endpoints on a 0.1 deg grid, kept strictly inside each side
+    phiPosDeg = floor(phiHi * 10) / 10;
+    phiNegDeg = ceil(phiLo * 10) / 10;
+    fprintf(['  [2a] pure RCM about the zero-pose tip: stroke-safe range ' ...
+        '[%.3f, +%.3f] deg (stroke %.0f/%.0f/%.0f mm; binds %s low / %s high)\n'], ...
+        phiLo, phiHi, travelLim, phiLoB, phiHiB);
+    fprintf('Demo trajectory: phi(X) %g..%g deg, tip fixed (pure RCM), %d frames @ %d fps\n', ...
+        phiNegDeg, phiPosDeg, nFrames, fps);
+
+    % ---- [2b] closed-form demo trajectory (Q + tip targets D_k) ----
     D = cell(1, nFrames);
     Q = zeros(nFrames, numel(names));
+    p = [0; 0; 0];      % RCM point = zero-pose tip position (held fixed)
     for k = 1:nFrames
         t = (k - 1) / (nFrames - 1);
-        phi = deg2rad(-phiMaxDeg + 2 * phiMaxDeg * t);
-        a = 2 * pi * t;
-        p = [RC * cos(a); RC * sin(a); 0];
+        phi = deg2rad(phiNegDeg + (phiPosDeg - phiNegDeg) * t);
 
         % tip world pose with hinge deflected, Manipulators at zero
         mL = containers.Map('KeyType', 'char', 'ValueType', 'double');
@@ -103,14 +120,16 @@ function test_animation_m_rex_3t1r()
         D{k} = [localRx(phi), p; 0 0 0 1];
     end
 
-    % manipulator travel envelope (real stroke ±10 mm in X/Y, ±15 mm in Z)
+    % manipulator travel envelope (real stroke |dx|<=10, |dy|<=10, |dz|<=15 mm)
     trav = abs(Q(:, 1:6));
     mX = max([trav(:, 1); trav(:, 4)]);
     mY = max([trav(:, 2); trav(:, 5)]);
     mZ = max([trav(:, 3); trav(:, 6)]);
-    assert(mX <= 10 && mY <= 10 && mZ <= 15, ...
+    tol = 1e-9;
+    assert(mX <= travelLim(1) + tol && mY <= travelLim(2) + tol ...
+        && mZ <= travelLim(3) + tol, ...
         'manipulator travel envelope exceeded (%.2f/%.2f/%.2f).', mX, mY, mZ);
-    fprintf(['  [2] closed form built: max travel |dx|=%.2f |dy|=%.2f |dz|=%.2f mm ' ...
+    fprintf(['  [2b] closed form built: max travel |dx|=%.2f |dy|=%.2f |dz|=%.2f mm ' ...
         '(limits 10/10/15)\n'], mX, mY, mZ);
 
     % ---- [3] solver config: case tool frame resolves to U = Ry(45°) ----
@@ -141,7 +160,8 @@ function test_animation_m_rex_3t1r()
         devG = max(devG, norm(seq.Frames{k}(g1) - seq.Frames{1}(g1), 'fro'));
     end
     % zero configuration through the same pipeline (frame 1 of the demo is
-    % NOT zero — the sweep starts at -phiMaxDeg): tip in tool world = U⁻¹
+    % NOT zero — the sweep starts at the negative range end): tip in tool
+    % world = U⁻¹
     seq0 = solver.buildPoseSequence(e, zeros(1, numel(names)), names, ...
         'Anchor', 'tool', 'ToolTransform', U);
     devZero = norm(seq0.Frames{1}(seq0.RootFrame) ...
@@ -177,7 +197,7 @@ function test_animation_m_rex_3t1r()
     scene = viz.sceneSpec(e);
     extra = struct('Label', 'tool (world-aligned)', 'Base', seq.RootFrame, 'T', U);
     fprintf('  [6] launching tool-world animation (close figure to continue) ...\n');
-    viz.play(seq, scene, 'Fps', fps, 'ExtraFrames', extra);
+    viz.play(seq, scene, 'Fps', fps, 'ExtraFrames', extra, 'ShowTrail', false);
 
     fprintf('=== test_animation_m_rex_3t1r: all checks passed ===\n');
 end
@@ -188,4 +208,49 @@ end
 
 function T = localTO(R, p)
     T = [R, p(:); 0 0 0 1];
+end
+
+function v = localRcmTravel(deg, e, P_L, P_R, R_bind)
+%LOCALRCMTRAVEL  Drive travel [max|dx| max|dy| max|dz|] for a pure RCM phi.
+%   Pure RCM: tip held at the zero-pose point, hinges deflected (joint_1.q =
+%   +phi, joint_2.q = -phi), Manipulators compensating.
+    ph = deg2rad(deg);
+    m = containers.Map('KeyType', 'char', 'ValueType', 'double');
+    m('joint_1.q') = ph;  m('joint_2.q') = -ph;
+    g = e.evaluateNumericDirect(m, ...
+        {'manipulator_L.ground', 'manipulator_R.ground'});
+    T1 = P_L * core.RigidBodyMath.invT(g('manipulator_L.ground'));
+    T2 = P_R * core.RigidBodyMath.invT(g('manipulator_R.ground'));
+    d = -R_bind.' * [T1(1:3, 4), T2(1:3, 4)];
+    v = max(abs(d), [], 2).';
+end
+
+function [loDeg, hiDeg, loBind, hiBind] = localSweepLimit(travelAt, lim)
+%LOCALSWEEPLIMIT  Stroke-safe rotation range [LODEG, HIDEG] [deg].
+%   travelAt(q) -> [max|dx| max|dy| max|dz|] over both Manipulators for a
+%   pure-RCM rotation of q about one axis from the zero pose.
+%   LOBIND / HIBIND name the drive axis that binds on each side ('dx'..'dz',
+%   'none' when that side stays inside LIM up to 60 deg).  Each returned bound
+%   is asserted tight: 0.1 deg further already exceeds the stroke.
+    [loDeg, loBind] = localSignLimit(travelAt, lim, -1);
+    [hiDeg, hiBind] = localSignLimit(travelAt, lim, +1);
+end
+
+function [deg, bind] = localSignLimit(travelAt, lim, sgn)
+    hiMax = 60;                        % beyond this the sweep is out of scope
+    f = @(d) max(travelAt(sgn * d) - lim);
+    if f(hiMax) < 0
+        deg = sgn * hiMax;  bind = 'none';
+        return;
+    end
+    lo = 0; hi = hiMax;
+    for it = 1:60
+        mid = (lo + hi) / 2;
+        if f(mid) < 0, lo = mid; else, hi = mid; end
+    end
+    deg = sgn * lo;
+    xyz = 'xyz';
+    [~, a] = max(travelAt(deg) - lim);
+    bind = ['d' xyz(a)];
+    assert(f(lo + 0.1) > 0, 'sweep limit %.3f deg is not tight.', lo);
 end

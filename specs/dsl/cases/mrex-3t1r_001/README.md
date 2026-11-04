@@ -98,8 +98,10 @@ flowchart TD
 **demo 轨迹的规定位置**：轨迹不在任何 `execution-config*.yaml` 里——它由测试脚本顶部参数区定义，
 经闭式构造展开成关节轨迹矩阵 `Q` 后传入动画/求解器（与 single-closed-loop 测试内联轨迹同例）：
 
-- φ（tip 绕 X 旋转）：−14° → +14°（14° 按实机行程 X/Y ±10 mm、Z ±15 mm 标定；16° 时 dy 会达 10.4 mm）
-- 位姿平移：XY 平面圆，半径 4 mm，一圈；θ(ry) = ψ(rz) = 0 锁定 —— RCM (x, y, z, φ) 任务模式
+- φ（tip 绕 X 旋转）：**纯 RCM 旋转**——tip 固定在零位点（$\mathbf{p} \equiv \mathbf{0}$，无平移、无圆轨迹），
+  只绕该点转 φ；θ(ry) = ψ(rz) = 0 锁定 —— RCM (x, y, z, φ) 任务模式
+- φ 范围：±15.3°（脚本内二分标定：Manipulator 实机行程 ±10/±10/±15 mm 下最大对称扫描为 **±15.382°**，
+  dy 轴先到限；dx / dz 单独可到 29.10° / 40.26°）
 - 60 帧 @ 30 fps
 
 **闭式构造（无 IK）**：
@@ -108,16 +110,17 @@ $$q_1 = \varphi,\quad q_2 = -\varphi,\qquad
 \mathbf{d}_{L/R} = R_{\text{bind}}^{\top}\bigl(\mathbf{p}(t) - \mathbf{p}_{\text{swing}}^{L/R}(\mp\varphi)\bigr)$$
 
 其中 $R_{\text{bind}} = \mathrm{rot}(P_L) = \mathrm{rot}(P_R)$（两侧 binding 旋转相同），
-$\mathbf{p}_{\text{swing}}$ 为单铰链偏转、Manipulator 零位时的 tip 世界位置（编译位姿函数求值）。
+$\mathbf{p}_{\text{swing}}$ 为单铰链偏转、Manipulator 零位时的 tip 世界位置（编译位姿函数求值）；
+本 demo 中 $\mathbf{p}(t) \equiv \mathbf{0}$（零位 tip 点 = RCM 点）。
 
 实测（`test_animation_m_rex_3t1r.m`）：
 
 | 检查项 | 结果 |
 |------|------|
-| 闭式轨迹 vs 目标（60 帧，全 6 自由度） | max‖E−D‖ = 1.9e-14 |
-| ClosureSolver 残差（全 12 分量，采样 5 帧） | max\|r\| = 1.7e-14（无 NaN） |
-| Manipulator 行程 | \|dx\|≤6.98、\|dy\|≤9.54、\|dz\|≤5.51 mm（≤ ±10/±10/±15） |
-| 动画分支一致性（两 ground 互差） | max = 2.2e-14 |
+| 闭式轨迹 vs 目标（60 帧，全 6 自由度） | max‖E−D‖ = 1.2e-14 |
+| ClosureSolver 残差（全 12 分量，采样 5 帧） | max\|r\| = 2.0e-14（无 NaN） |
+| Manipulator 行程（φ = ±15.3°） | \|dx\|≤4.61、\|dy\|≤9.94、\|dz\|≤4.61 mm（≤ ±10/±10/±15） |
+| 动画分支一致性（两 ground 互差） | max = 1.8e-14 |
 
 > `execution-config.yaml`（原 `execution-config-3t1r.yaml`，配置合并后更名）= 3T1R
 > **全任务空间**执行配置（`unknown` 含两个内部关节、`components` 全 12 分量）——供求解器侧

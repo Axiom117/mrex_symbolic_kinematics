@@ -607,11 +607,14 @@ flowchart LR
 >   $E(q)=T_{\text{bind}}\cdot T_{\text{tip}\leftarrow g_{\text{ref}}}^{-1}(q)$ 共轭到世界系——
 >   两台 Manipulator 的 ground frame 静止于标定位姿（零位 FK 标定，与 `ClosureSolver` 一致），
 >   工具端沿轨迹运动；`'ShowTrail'` 叠加 tip 世界轨迹（全程淡虚线 + 已走过段高亮 + 当前标记）。
-> - **闭式 demo 轨迹（无 IK / 无 fmincon）**：φ（tip 绕 X 旋转）−14°→+14° 与 XY 平面圆（r=4 mm，一圈）
->   同步；`joint_1.q=φ`、`joint_2.q=−φ`，补偿 $\mathbf{d} = R_{\text{bind}}^{\top}(\mathbf{p}_{\text{target}} - \mathbf{p}_{\text{swing}})$，
->   $R_{\text{bind}} = \mathrm{rot}(P_L) = \mathrm{rot}(P_R)$。实测：全帧 max‖E−D‖ = 1.9e-14；
->   ClosureSolver 全 12 分量残差 max\|r\| = 1.7e-14；行程 6.98/9.54/5.51 mm（≤ ±10/±10/±15 实机行程；
->   2026-10-26 行程限位由 20/20/30 修正为 ±10/±10/±15 后重标定，原参数为 28°/r=5 mm）。
+> - **闭式 demo 轨迹（无 IK / 无 fmincon）**：纯 RCM 旋转——tip 固定在零位点（$\mathbf{p}\equiv\mathbf{0}$，
+>   无平移、无圆轨迹），只绕该点转 φ（tip 绕 X）；`joint_1.q=φ`、`joint_2.q=−φ`，补偿
+>   $\mathbf{d} = R_{\text{bind}}^{\top}(\mathbf{p}_{\text{target}} - \mathbf{p}_{\text{swing}})$，
+>   $R_{\text{bind}} = \mathrm{rot}(P_L) = \mathrm{rot}(P_R)$。实测：全帧 max‖E−D‖ = 1.2e-14；
+>   ClosureSolver 全 12 分量残差 max\|r\| = 2.0e-14；行程 4.61/9.94/4.61 mm（≤ ±10/±10/±15 实机行程，
+>   φ = ±15.3°）。最大对称 RCM 扫描 **±15.382°**（dy 轴先到限；dx / dz 单独可到 29.10° / 40.26°），
+>   由脚本内二分标定并断言紧致（+0.05° 即越限）。（2026-10-27：demo 由「φ 扫描 + XY 圆」改为纯 RCM
+>   旋转，并按 ±10/±10/±15 mm 行程重标定。）
 > - **配套**：`execution-config-3t1r.yaml`（8 未知量 / 全 12 分量，3T1R 全任务空间模式，原「DOF 发现」预告的配置演进；2026-10-11 配置合并后成为案例唯一配置并更名 `execution-config.yaml`，原 6 未知量 3T 基线并入测试 fixture）；
 >   `renderFrame` 无几何 body 简化盒 fallback（Manipulator 可见）；`ClosureSolver` 的 ry 分量改用 `asin`
 >   （修复符号 `atan2+sqrt` 展开在生成代码中产生 NaN 的问题，分支与 ZYX 提取完全等价）。

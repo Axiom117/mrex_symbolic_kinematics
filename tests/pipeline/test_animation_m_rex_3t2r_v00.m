@@ -1,12 +1,13 @@
 function test_animation_m_rex_3t2r_v00()
 %TEST_ANIMATION_M_REX_3T2R_V00  Layered pipeline + tool-frame animation (mrex_3t2r_v00).
 %   Same end-to-end flow as test_animation_m_rex_3t2r.m, applied to the
-%   stage-C base assembly mrex_3t2r_v00.  The tool frame ROLLS on a sphere —
-%   the tip rotation sweeps the exact two-parameter family
-%       R = Rz(-q1) · Rx(-q2)
-%   — while the tip position follows a small 3D path (XY circle + z bob,
-%   covering all three translation freedoms).  The joint trajectory is built
-%   in closed form (no IK, no fmincon):
+%   stage-C base assembly mrex_3t2r_v00, under PURE RCM: the tip stays fixed
+%   at the zero-pose point (p ≡ 0 — no translation, no circle) and only
+%   rotates.  The demo is a single-axis tour that sweeps each rotation axis to
+%   its own stroke limit and back (0 → +q1 → 0 → +q2 → 0 → −q1 → 0 → −q2 → 0),
+%   one axis at a time; the tip rotation stays in the exact two-parameter
+%   family R = Rz(-q1)·Rx(-q2).  The joint trajectory is built in closed form
+%   (no IK, no fmincon):
 %       joint_3.q = -joint_1.q;  joint_4.q =  joint_2.q   (v00 closure)
 %       dL = R_bind' * (p_target - p_swingL(q1, q2))
 %       dR = R_bind' * (p_target - p_swingR(q3, q4))
@@ -15,6 +16,16 @@ function test_animation_m_rex_3t2r_v00()
 %   the corresponding roll deflected and both Manipulators at zero (evaluated
 %   via the compiled pose functions).
 %
+%   Per-axis ranges — calibrated here by bisection on the compiled pose
+%   functions, coupling ignored (one axis at a time from the zero pose), with
+%   the real Manipulator stroke |dx| <= 10, |dy| <= 10, |dz| <= 15 mm:
+%     q1 (Rz roll): [-25.215, +25.215] deg (dy binds; dx / dz would allow
+%                                          33.39 / 48.13 deg)
+%     q2 (Rx roll): [-15.945, +15.945] deg (dy binds; dx / dz would allow
+%                                          39.09 / 51.80 deg)
+%   Each bound is asserted tight (0.1 deg beyond it already exceeds the
+%   stroke); the demo tour sweeps q1 ±25.2 and q2 ±15.9 deg.
+%
 %   NOTE — v00 differs from mrex_3t2r_001 in the platform-side Joint 2
 %   mounting (roll 1 instead of none), so the mirrored relation q3 = -q2,
 %   q4 = -q1 does NOT close this assembly.  The closed form here was verified
@@ -22,16 +33,19 @@ function test_animation_m_rex_3t2r_v00()
 %
 %   Checks:
 %     [1] symbolic pipeline + bindings (rot(P_L) == rot(P_R))
-%     [2] closed form built: rotation-family exactness on BOTH branches +
-%         travel envelope (10/10/15 mm) + tool-axis sweep on the unit sphere
-%     [3] solver config: v00 execution config resolves U = Trans(0,0,-1)·Ry(+45°)
+%     [2] pure-RCM per-axis sweep limits (bisection, tightness asserted) +
+%         closed-form single-axis tour: rotation-family exactness on BOTH
+%         branches + travel envelope ±10/±10/±15 mm + tool-axis sweep on the
+%         unit sphere
+%     [3] solver config: v00 execution config resolves U = Ry(45°)
 %     [4] compute layer: solver.buildPoseSequence('Anchor','tool') — tip path
 %         = U⁻¹·D_k, zero pose shows the 1 mm tool offset at 45°, grounds static,
 %         branch gap ~1e-14
 %     [5] solver cross-check: ClosureSolver residual (setTipTarget) and
 %         evalToolPose (tool-frame reporting) at sampled frames
 %     [6] render layer: viz.sceneSpec + viz.play with the tool triad attached
-%         to the root (ExtraFrames)
+%         to the root (ExtraFrames); the tip trail is switched off (the tip is
+%         a fixed RCM point, no path to draw)
 %
 %   Requires: Symbolic Math Toolbox
 %
@@ -42,20 +56,12 @@ function test_animation_m_rex_3t2r_v00()
     rootDir = fileparts(fileparts(fileparts(mfilename('fullpath'))));
     addpath(genpath(fullfile(rootDir, 'scripts', 'matlab')));
 
-    % ---- demo trajectory parameters (tool frame rolling on a sphere) ----
-    rollA1Deg = 9;     % q1 (Rz roll) lissajous amplitude    [deg]
-    rollA2Deg = 8;     % q2 (Rx roll) lissajous amplitude    [deg]
-    RC        = 3;     % XY circle radius                    [mm]
-    zAmp      = 1.2;   % z bob amplitude (3rd translation)   [mm]
-                       % (9/8 deg + r=3 + z bob keeps the manip
-                       %  travel within the ±10/±10/±15 mm envelope)
-    nFrames   = 60;    % frames per loop
+    % ---- demo trajectory parameters (pure-RCM single-axis tour) ----
+    travelLim = [10 10 15];  % real Manipulator stroke |dx| |dy| |dz| [mm]
+    nFrames   = 120;   % frames per loop (15 per tour segment)
     fps       = 30;    % playback speed
 
-    fprintf('=== test_animation_m_rex_3t2r_v00 (stage-C base + tool-frame sphere roll) ===\n');
-    fprintf(['Demo: roll q1,q2 = ±%d, ±%d deg (lissajous; q3=-q1, q4=q2) + ' ...
-        'XY circle r=%.1f mm + z bob ±%.1f mm, %d frames @ %d fps\n'], ...
-        rollA1Deg, rollA2Deg, RC, zAmp, nFrames, fps);
+    fprintf('=== test_animation_m_rex_3t2r_v00 (stage-C base + pure RCM) ===\n');
 
     dslFile  = fullfile(rootDir, 'specs', 'dsl', 'cases', 'mrex_3t2r_v00', ...
         'robot_description.yaml');
@@ -79,17 +85,42 @@ function test_animation_m_rex_3t2r_v00()
     assert(rotDev < 1e-12, 'ground binding rotations differ (%.3e).', rotDev);
     fprintf('  [1] pipeline OK; rot(P_L) == rot(P_R) (dev %.1e)\n', rotDev);
 
-    % ---- [2] closed-form demo trajectory (Q + tip targets D_k) ----
+    % ---- [2a] per-axis pure-RCM sweep limits (coupling ignored) ----
+    travelQ1 = @(deg) localRcmTravel(deg, 0, e, P_L, P_R, R_bind);
+    travelQ2 = @(deg) localRcmTravel(0, deg, e, P_L, P_R, R_bind);
+    [q1Lo, q1Hi, q1LoB, q1HiB] = localSweepLimit(travelQ1, travelLim);
+    [q2Lo, q2Hi, q2LoB, q2HiB] = localSweepLimit(travelQ2, travelLim);
+    % demo amplitudes on a 0.1 deg grid, kept strictly inside each side
+    q1Pos = floor(q1Hi * 10) / 10;   q1Neg = ceil(q1Lo * 10) / 10;
+    q2Pos = floor(q2Hi * 10) / 10;   q2Neg = ceil(q2Lo * 10) / 10;
+    fprintf(['  [2a] pure RCM per-axis limits (stroke %.0f/%.0f/%.0f mm, ' ...
+        'coupling ignored):\n'], travelLim);
+    fprintf('       q1 (Rz roll): [%.3f, +%.3f] deg  (binds %s low / %s high)\n', ...
+        q1Lo, q1Hi, q1LoB, q1HiB);
+    fprintf('       q2 (Rx roll): [%.3f, +%.3f] deg  (binds %s low / %s high)\n', ...
+        q2Lo, q2Hi, q2LoB, q2HiB);
+    fprintf(['Demo trajectory: single-axis RCM tour q1 [%g, +%g], q2 [%g, +%g] ' ...
+        'deg (tip fixed), %d frames @ %d fps\n'], ...
+        q1Neg, q1Pos, q2Neg, q2Pos, nFrames, fps);
+
+    % ---- [2b] closed-form demo trajectory (Q + tip targets D_k) ----
+    % One axis at a time: 0 → +q1 → 0 → +q2 → 0 → −q1 → 0 → −q2 → 0, so every
+    % segment is a single-DOF RCM rotation and the tour starts/ends at zero.
+    wp = deg2rad([0 0; q1Pos 0; 0 0; 0 q2Pos; 0 0; ...
+                  q1Neg 0; 0 0; 0 q2Neg; 0 0]);
+    nSeg = size(wp, 1) - 1;
     D = cell(1, nFrames);
     Q = zeros(nFrames, numel(names));
     maxFamDev = 0;   % exactness of R_tip == Rz(-q1)·Rx(-q2), both branches
     axTilt    = 0;   % tool-axis sweep angle on the unit sphere
+    p = [0; 0; 0];   % RCM point = zero-pose tip position (held fixed)
     for k = 1:nFrames
-        t = (k - 1) / (nFrames - 1);
-        q1 = deg2rad(rollA1Deg) * sin(2 * pi * t);
-        q2 = deg2rad(rollA2Deg) * sin(4 * pi * t);
+        s = (k - 1) / (nFrames - 1) * nSeg;     % tour position [segment]
+        i = min(floor(s) + 1, nSeg);
+        u = s - (i - 1);
+        q1 = wp(i, 1) + u * (wp(i + 1, 1) - wp(i, 1));
+        q2 = wp(i, 2) + u * (wp(i + 1, 2) - wp(i, 2));
         q3 = -q1;  q4 = q2;                     % v00 closure (same-order, one flip)
-        p = [RC * cos(2 * pi * t); RC * sin(2 * pi * t); zAmp * sin(4 * pi * t)];
 
         % swing tip positions with the roll deflected, Manipulators at zero
         mL = containers.Map('KeyType', 'char', 'ValueType', 'double');
@@ -118,15 +149,17 @@ function test_animation_m_rex_3t2r_v00()
         axTilt = max(axTilt, acosd(min(1, abs(R_tip(3, 3)))));
     end
 
-    % manipulator travel envelope (real stroke ±10 mm in X/Y, ±15 mm in Z)
+    % manipulator travel envelope (real stroke |dx|<=10, |dy|<=10, |dz|<=15 mm)
     trav = abs(Q(:, 1:6));
     mX = max([trav(:, 1); trav(:, 4)]);
     mY = max([trav(:, 2); trav(:, 5)]);
     mZ = max([trav(:, 3); trav(:, 6)]);
-    assert(mX <= 10 && mY <= 10 && mZ <= 15, ...
+    tol = 1e-9;
+    assert(mX <= travelLim(1) + tol && mY <= travelLim(2) + tol ...
+        && mZ <= travelLim(3) + tol, ...
         'manipulator travel envelope exceeded (%.2f/%.2f/%.2f).', mX, mY, mZ);
     assert(maxFamDev < 1e-9, 'rotation-family exactness deviates (%.3e).', maxFamDev);
-    fprintf(['  [2] closed form built: family dev = %.1e (both branches); ' ...
+    fprintf(['  [2b] closed form built: family dev = %.1e (both branches); ' ...
         'max travel |dx|=%.2f |dy|=%.2f |dz|=%.2f mm (limits 10/10/15); ' ...
         'tool-axis sweep <= %.1f deg\n'], maxFamDev, mX, mY, mZ, axTilt);
 
@@ -159,13 +192,10 @@ function test_animation_m_rex_3t2r_v00()
             norm(seq.Trail(:, k) - Ek(1:3, 4)));
         devG = max(devG, norm(seq.Frames{k}(g1) - seq.Frames{1}(g1), 'fro'));
     end
-    % zero configuration through the same pipeline (frame 1 of the demo is
-    % NOT the exact zero pose — position offset (RC,0,0) and z=0):
-    % tip in tool world = U⁻¹ ⇒ 1 mm offset at -45° about y: (-√2/2, 0, √2/2)
-    seq0 = solver.buildPoseSequence(e, zeros(1, numel(names)), names, ...
-        'Anchor', 'tool', 'ToolTransform', U);
-    devZero = norm(seq0.Frames{1}(seq0.RootFrame) ...
-        - localTO(localRy(-pi / 4), [-sqrt(2) / 2; 0; sqrt(2) / 2]), 'fro');
+    % frame 1 of the tour is the exact zero pose (q1 = q2 = 0, p = 0), so the
+    % tool world shows the −45° pipette tilt directly
+    devZero = norm(seq.Frames{1}(seq.RootFrame) ...
+        - localTO(core.RigidBodyMath.roty(-pi/4), [0; 0; 0]), 'fro');
     assert(devTip < 1e-9, 'tool-world tip path deviates from U⁻¹·D_k (%.3e)', devTip);
     assert(devTrail < 1e-9, 'tool-world trail deviates (%.3e)', devTrail);
     assert(devZero < 1e-9, ...
@@ -198,7 +228,7 @@ function test_animation_m_rex_3t2r_v00()
     scene = viz.sceneSpec(e);
     extra = struct('Label', 'tool (world-aligned)', 'Base', seq.RootFrame, 'T', U);
     fprintf('  [6] launching tool-world animation (close figure to continue) ...\n');
-    viz.play(seq, scene, 'Fps', fps, 'ExtraFrames', extra);
+    viz.play(seq, scene, 'Fps', fps, 'ExtraFrames', extra, 'ShowTrail', false);
 
     fprintf('=== test_animation_m_rex_3t2r_v00: all checks passed ===\n');
 end
@@ -220,4 +250,53 @@ end
 
 function T = localTO(R, p)
     T = [R, p(:); 0 0 0 1];
+end
+
+function v = localRcmTravel(deg1, deg2, e, P_L, P_R, R_bind)
+%LOCALRCMTRAVEL  Drive travel [max|dx| max|dy| max|dz|] for a pure RCM pose.
+%   Single-axis sweeps pass one angle and zero for the other; the v00 closure
+%   (joint_3.q = -q1, joint_4.q = q2) keeps the tip in the Rz(-q1)·Rx(-q2)
+%   family on both branches.
+    q1 = deg2rad(deg1);  q2 = deg2rad(deg2);
+    mL = containers.Map('KeyType', 'char', 'ValueType', 'double');
+    mL('joint_1.q') = q1;  mL('joint_2.q') = q2;
+    gL = e.evaluateNumericDirect(mL, {'manipulator_1.ground'});
+    T_L = P_L * core.RigidBodyMath.invT(gL('manipulator_1.ground'));
+    mR = containers.Map('KeyType', 'char', 'ValueType', 'double');
+    mR('joint_3.q') = -q1;  mR('joint_4.q') = q2;
+    gR = e.evaluateNumericDirect(mR, {'manipulator_2.ground'});
+    T_R = P_R * core.RigidBodyMath.invT(gR('manipulator_2.ground'));
+    d = -R_bind.' * [T_L(1:3, 4), T_R(1:3, 4)];
+    v = max(abs(d), [], 2).';
+end
+
+function [loDeg, hiDeg, loBind, hiBind] = localSweepLimit(travelAt, lim)
+%LOCALSWEEPLIMIT  Stroke-safe single-axis rotation range [LODEG, HIDEG] [deg].
+%   travelAt(q) -> [max|dx| max|dy| max|dz|] over both Manipulators for a
+%   pure-RCM rotation of q about one axis from the zero pose (coupling is not
+%   considered: one axis at a time).
+%   LOBIND / HIBIND name the drive axis that binds on each side ('dx'..'dz',
+%   'none' when that side stays inside LIM up to 60 deg).  Each returned bound
+%   is asserted tight: 0.1 deg further already exceeds the stroke.
+    [loDeg, loBind] = localSignLimit(travelAt, lim, -1);
+    [hiDeg, hiBind] = localSignLimit(travelAt, lim, +1);
+end
+
+function [deg, bind] = localSignLimit(travelAt, lim, sgn)
+    hiMax = 60;                        % beyond this the sweep is out of scope
+    f = @(d) max(travelAt(sgn * d) - lim);
+    if f(hiMax) < 0
+        deg = sgn * hiMax;  bind = 'none';
+        return;
+    end
+    lo = 0; hi = hiMax;
+    for it = 1:60
+        mid = (lo + hi) / 2;
+        if f(mid) < 0, lo = mid; else, hi = mid; end
+    end
+    deg = sgn * lo;
+    xyz = 'xyz';
+    [~, a] = max(travelAt(deg) - lim);
+    bind = ['d' xyz(a)];
+    assert(f(lo + 0.1) > 0, 'sweep limit %.3f deg is not tight.', lo);
 end
