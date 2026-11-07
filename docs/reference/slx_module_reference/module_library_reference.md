@@ -32,7 +32,7 @@
 | `Pin` | `system_15.xml` | `sideA`, `sideB` | `assets/connector_dowel_pin.step` | 1 个主体 + 2 个连接侧 |
 | `Joint` | `system_21.xml` | `linkA`, `linkB` | `assets/linkage_hinge_joint.STEP` | 2 个主体 + 1 个转动副 |
 | `ToolPipette` | `system_32.xml` | `connector_side`, `tip_origin` | `assets/tool.STEP` | 1 个主体 + 连接端 + 针尖原点 |
-| `Adaptor` | `system_39.xml` | `attachment_point`, `dock` | `assets/adaptor_45.STEP` | 1 个主体 + 2 级对齐框架 |
+| `Adaptor`（DSL: `Adaptor_45`） | `system_39.xml` | `attachment_point`, `dock` | `assets/adaptor_45.STEP` | 1 个主体 + 2 级对齐框架 |
 
 ## 各模块可抽取定义
 
@@ -132,9 +132,9 @@
 - 结构连接参考面
 - 功能参考点或工具坐标原点
 
-### 5. Adaptor
+### 5. Adaptor（DSL: `Adaptor_45`）
 
-`Adaptor` 由一个主体和两个不同用途的外部参考点组成。
+`Adaptor`（本项目 L1 模块 `Adaptor_45`）由一个主体和两个不同用途的外部参考点组成。
 
 可直接抽取的字段：
 
@@ -147,7 +147,7 @@
 - 主体直接分出一条支路到 `dock`
 - 另一条支路经过 `rectify -> align_axis` 后到 `attachment_point`
 
-这说明 `Adaptor` 在 DSL 中更像一个坐标适配模块，而不是纯连接块。
+这说明 `Adaptor_45` 在 DSL 中更像一个坐标适配模块，而不是纯连接块。
 
 ## 对符号化语言最有价值的抽象
 

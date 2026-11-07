@@ -2,7 +2,7 @@
 # mrex_3t2r_v03 执行配置 — 3T2R 全任务空间模式（评估用）
 #
 # 本案例由 mrex_modularization 生成（stage C）。与 v01 相比，本变体将两条
-# platform 侧 Joint 设为 roll 0，左 Manipulator dock 为 roll 2，并把 Adaptor
+# platform 侧 Joint 设为 roll 0，左 Manipulator dock 为 roll 2，并把 Adaptor_45
 # 改接 pin_connector_A / frame_3.faceYMinus 与 frame_4.faceYMinus（roll 2）。
 # 具体装配以 robot_description.yaml 为准；零位标定与 k01/v01 不同，评估前
 # 必须重新导出本案例模型包。

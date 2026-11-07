@@ -6,7 +6,7 @@
 
 ## 结构概述
 
-两端各一个 **Manipulator**（3-DOF 笛卡尔驱动，dx/dy/dz）经 **Adaptor** 接入 M-REx 单元链。主运动链为
+两端各一个 **Manipulator**（3-DOF 笛卡尔驱动，dx/dy/dz）经 **Adaptor_45** 接入 M-REx 单元链。主运动链为
 **Frame_2 → Joint_1(Z) → Frame_3 → Joint_2(Y) → Frame_4 → Joint_3(Y) → Frame_5 → Joint_4(Z) → Frame_6**
 的四关节串接（相比 3T1R 版的双关节 Y-Y 链多出一对 Z/Y 关节，任务空间扩展出第二个转动自由度）；
 **ToolPipette** 从 Frame_4 分支提供 `tip_origin` 观测点；左端 Frame_1↔Frame_2、右端 Frame_6↔Frame_7
@@ -26,12 +26,12 @@ flowchart TD
 
     subgraph left["左支"]
         direction TB
-        j2{{Joint 2}} --> f3[Frame 3] --> j1{{Joint 1}} --> f2[Frame 2] -->|Pin 1| f1[Frame 1] --> aL[Adaptor L] --> mL[Manipulator L]
+        j2{{Joint 2}} --> f3[Frame 3] --> j1{{Joint 1}} --> f2[Frame 2] -->|Pin 1| f1[Frame 1] --> aL[Adaptor_45 L] --> mL[Manipulator L]
     end
 
     subgraph right["右支"]
         direction TB
-        j3{{Joint 3}} --> f5[Frame 5] --> j4{{Joint 4}} --> f6[Frame 6] -->|Pin 2| f7[Frame 7] --> aR[Adaptor R] --> mR[Manipulator R]
+        j3{{Joint 3}} --> f5[Frame 5] --> j4{{Joint 4}} --> f6[Frame 6] -->|Pin 2| f7[Frame 7] --> aR[Adaptor_45 R] --> mR[Manipulator R]
     end
 
     f4 --> j2

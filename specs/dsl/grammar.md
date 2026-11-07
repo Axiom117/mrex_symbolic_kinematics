@@ -106,8 +106,8 @@ v0 实例定义只允许 `type` 一个字段（`additionalProperties: false`）�
 ### 4.3 类型引用规则
 
 - `type` 的取值必须等于模块库中某个模块文件的 `module_type` 字段（如 `Frame`、`Joint`、
-  `Adaptor`、`Manipulator`、`Pin`、`ToolPipette`）。
-- 采用 **UpperCamelCase**（模块类型名规则），不含下划线。
+  `Adaptor_45`、`Manipulator`、`Pin`、`ToolPipette`）。
+- 采用 **UpperCamelCase**（模块类型名规则）；同族变体允许 `_<后缀>` 区分型号（如 `Adaptor_45`、`Adaptor_90`）。
 - 「该 `module_type` 是否存在」属于跨文件校验，Schema 无法覆盖，由解释器加载模块库后校验（§7）。
 
 ### 4.4 实例参数规则（v0）
@@ -193,7 +193,7 @@ connections:
 
 | 需求 | 正确做法 |
 |------|------|
-| 坐标适配（额外平移/旋转） | 插入 `Adaptor` 模块 |
+| 坐标适配（额外平移/旋转） | 插入 `Adaptor_45` 等 Adaptor 模块 |
 | 运行时连续绕法向转动 | 插入 revolute `Joint` 模块 |
 
 ### 5.7 闭环归属：L2 vs L3

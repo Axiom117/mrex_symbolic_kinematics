@@ -61,7 +61,7 @@ graph TD
 | `specs/modules/Frame.yaml` | `Frame` 立方体结构件（structural, 0 DOF, 1 body + 6 socket 端口） |
 | `specs/modules/Pin.yaml` | `Pin` 销钉连接件（structural, 0 DOF, 1 body + 2 plug 端口） |
 | `specs/modules/Joint.yaml` | `Joint` 铰接关节件（kinematic, 1 DOF revolute, 2 bodies + 2 plug 端口） |
-| `specs/modules/Adaptor.yaml` | `Adaptor` 坐标适配件（structural, 0 DOF, 1 body + 2 plug 端口） |
+| `specs/modules/Adaptor_45.yaml` | `Adaptor_45` 45° 坐标适配件（structural, 0 DOF, 1 body + 2 plug 端口） |
 | `specs/modules/ToolPipette.yaml` | `ToolPipette` 工具末端件（structural, 0 DOF, 1 body + 1 plug + 1 任务系） |
 | `specs/modules/Manipulator.yaml` | `Manipulator` 外部驱动接口件（kinematic, 3 DOF cartesian, 4 bodies + 1 socket + 1 ground frame） |
 | `specs/modules/README.md` | 模块库索引：三层数据结构说明、校验命令 |
@@ -128,7 +128,7 @@ graph TD
 | `specs/modeling-conventions.md` | **人的权威**：4 层架构、元件/端口/连接/坐标系完整约定（A.0 冻结） | 权威约定 | `project-overview.md` | `terminology.md`, `conventions.yaml`, 全部模块 YAML, `grammar.md`, `connection-semantics.md` |
 | `specs/terminology.md` | 中英术语对照：元件名、层级名、语义标签、连接类型 | 参考词表 | `modeling-conventions.md` | 全部文档的术语一致性 |
 | `specs/conventions.yaml` | **机器的权威**：与 `modeling-conventions.md` 等价的机器可读常量 | 权威常量 | `modeling-conventions.md` | 全部 3 份 schema, 解释器/校验器代码 |
-| `specs/modules/*.yaml` | 6 份 L1 模块类文本定义（Frame/Pin/Joint/Adaptor/ToolPipette/Manipulator） | 权威数据 | `modeling-conventions.md`, `module-definition.schema.yaml` | DSL 案例, `Expander.m`（模块库加载） |
+| `specs/modules/*.yaml` | 6 份 L1 模块类文本定义（Frame/Pin/Joint/Adaptor_45/ToolPipette/Manipulator） | 权威数据 | `modeling-conventions.md`, `module-definition.schema.yaml` | DSL 案例, `Expander.m`（模块库加载） |
 | `specs/dsl/grammar.md` | DSL v0 语法规范：实例声明、连接声明的合法字段与正则 | 权威语法 | `modeling-conventions.md` | `mechanism-assembly.schema.yaml`, `validation-checklist.md`, 全部 DSL 案例 |
 | `specs/dsl/connection-semantics.md` | Mate 变换公式、`roll` 参数、`closed` 标记、极性门控、L2 vs L3 闭环 | 权威语义 | `modeling-conventions.md` | `port-attachment.md`, `grammar.md`（连接节）, `ARCHITECTURE.md` |
 | `specs/dsl/validation-checklist.md` | Schema 静态校验 vs 解释器校验的分界清单 | 校验边界 | `grammar.md`, `mechanism-assembly.schema.yaml` | 解释器校验实现 |

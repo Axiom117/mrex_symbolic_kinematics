@@ -3,7 +3,7 @@
 #
 # 本案例由 mrex_modularization 生成（stage C）。与 v01 相比，本变体将两条
 # platform 侧 Joint 设为 roll 0、两侧 Manipulator dock 均 roll 2，并把
-# joint_1/joint_3 改接 Frame 的 faceXMinus、Adaptor 改接 faceYPlus
+# joint_1/joint_3 改接 Frame 的 faceXMinus、Adaptor_45 改接 faceYPlus
 # （roll 1 / roll 3）。具体装配以 robot_description.yaml 为准；零位标定与
 # k01/v01 不同，评估前必须重新导出本案例模型包。
 #

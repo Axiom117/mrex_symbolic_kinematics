@@ -12,7 +12,7 @@
 | [frame.yaml](frame.yaml) | `Frame` 立方体结构件 | structural | 0 |
 | [pin.yaml](pin.yaml) | `Pin` 销钉连接件 | structural | 0 |
 | [joint.yaml](joint.yaml) | `Joint` 铰接关节件 | kinematic | 1 |
-| [adaptor.yaml](adaptor.yaml) | `Adaptor` 坐标适配件 | structural | 0 |
+| [Adaptor_45.yaml](Adaptor_45.yaml) | `Adaptor_45` 45° 坐标适配件 | structural | 0 |
 | [toolPipette.yaml](toolPipette.yaml) | `ToolPipette` 工具末端件 | structural | 0 |
 | [Manipulator.yaml](Manipulator.yaml) | `Manipulator` 外部驱动接口件（非 SLX） | kinematic | 3 |
 | [config/parameters.yaml](config/parameters.yaml) | 模块参数取值配置（按 module_type → 参数值映射；v0 禁止 variant） | config | — |

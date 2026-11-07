@@ -239,7 +239,7 @@ $defs:
 properties:
 
   module_type:
-    description: 模块类唯一名（UpperCamelCase；库内遗留名允许下划线，§4）。
+    description: 模块类唯一名（UpperCamelCase；同族变体用 `_<后缀>` 区分，如 `Adaptor_45`，§4）。
     type: string
     pattern: "^[A-Z][A-Za-z0-9]*(_[A-Za-z0-9]+)*$"
 

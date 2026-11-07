@@ -57,7 +57,7 @@ connections:
 |---|------|------|
 | 1 | **工具置顶** | 以末端执行器为**根节点**，置于图表顶部中央。若无显式工具，则以最后一个 Frame 或观测帧为根。 |
 | 2 | **Joint 为行分隔** | 每个运动副独占一个水平层。所有 Joint 通过不可见边（`~~~`）对齐到同一「关节层」，形成视觉分隔线。 |
-| 3 | **刚性段纵向堆叠** | Joint 层之间的纯刚性模块（Frame、Adaptor）按连接顺序纵向堆叠。Joint **上方**为「工具侧」刚性链，**下方**为「驱动侧」刚性链。**Pin（销钉连接件）不作为节点出现**，而是标注在连接边上（`-->|Pin N|`）——Pin 仅传递位姿，不引入自由度或独立几何体。 |
+| 3 | **刚性段纵向堆叠** | Joint 层之间的纯刚性模块（Frame、Adaptor_45）按连接顺序纵向堆叠。Joint **上方**为「工具侧」刚性链，**下方**为「驱动侧」刚性链。**Pin（销钉连接件）不作为节点出现**，而是标注在连接边上（`-->|Pin N|`）——Pin 仅传递位姿，不引入自由度或独立几何体。 |
 | 4 | **分支横向展开** | 当一个模块连接多个下游模块时，分支横向展开。**多支链机构（闭链/并联）必须使用 `subgraph` 将各支链封装为独立布局单元**，配合 `direction TB` 保证支链内部自上而下、支链之间左右严格对称，避免 Mermaid 自动布局导致的节点错位和箭头交叉。 |
 | 5 | **驱动置底** | 驱动模块置于每条运动链的最底层。多驱动时横向对齐到同一行。 |
 | 6 | **闭环收束** | 所有驱动的 ground frame 最终收束到同一个 `((World / Ground))` 圆形节点。开链：一个驱动 → ground；闭链/并联：多个驱动 → 同一 ground。 |
@@ -73,7 +73,7 @@ flowchart TD
 
     subgraph L["左支"]
         direction TB
-        fL[Frame] --> jL{{Joint}} --> aL[Adaptor] --> dL[Manipulator]
+        fL[Frame] --> jL{{Joint}} --> aL[Adaptor_45] --> dL[Manipulator]
     end
 
     f0 -->|Pin L| fL
@@ -86,7 +86,7 @@ flowchart TD
 
 | 形状 | Mermaid 语法 | 用于 |
 |------|-------------|------|
-| 方框 | `[label]` | Frame、Adaptor 等刚性模块 |
+| 方框 | `[label]` | Frame、Adaptor_45 等刚性模块 |
 | 六边形 | `{{label}}` | Joint（revolute / prismatic） |
 | 圆形 | `((label))` | World / Ground（闭环收束点） |
 | 矩形 | `[label]` | Manipulator（驱动模块） |

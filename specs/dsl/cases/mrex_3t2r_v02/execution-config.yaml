@@ -3,7 +3,7 @@
 #
 # 本案例由 mrex_modularization 生成（stage C）。与 v01 相比，本变体同时改变了
 # 左右支的 roll / 面选择（例如两条 platform 侧 Joint 均为 roll 1、两侧
-# Manipulator dock 均 roll 2、Adaptor 改用 pin_connector_A / frame 面等）。
+# Manipulator dock 均 roll 2、Adaptor_45 改用 pin_connector_A / frame 面等）。
 # 具体装配以 robot_description.yaml 为准；零位标定与 k01/v01 不同，评估前
 # 必须重新导出本案例模型包。
 #

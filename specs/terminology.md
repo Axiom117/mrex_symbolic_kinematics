@@ -72,7 +72,7 @@
 |------|------|------|
 | `polarity` | 端口极性 | 机械对接公母；`socket`（凹面钢片，`Frame` 六面与 `Manipulator.dock`）/ `plug`（凸面磁铁，其余机械面）。仅 `socket↔plug` 合法。任务/工具参考系与 `ground` 接地系不带 polarity（见 `modeling-conventions.md §9.5`） |
 | `socket` | 母口 | 凹陷接收面，由 `Frame` 六面与 `Manipulator.dock` 提供 |
-| `plug` | 公口 | 凸出对插面，`Pin`/`Joint`/`Adaptor`/工具连接面等 |
+| `plug` | 公口 | 凸出对插面，`Pin`/`Joint`/`Adaptor_45`/工具连接面等 |
 | `symmetry` | 旋转对称阶 | 端口绕 `+Z` 对插法向的旋转对称阶；缺省 4（方钢片 C4），约束 `roll` 合法离散取值（见 `§9.6`） |
 | `roll` | 装配滚转 | 连接级离散参数，实际角 = `roll · 360/symmetry` 度；仅离散，连续转动须用 `Joint` 模块（见 `§10.3`） |
 | `mateTransform` | 对插变换 | 解释器装配时施加的标准变换 `Rz(roll·360/symmetry)·Rx(π)`，使两端口面对面贴合（见 `§10.2`） |
@@ -86,7 +86,7 @@
 | `coincident` | 两端口经标准 mate 变换后面对面贴合（唯一合法连接类型）；所有 port `+Z` 统一朝外，解释器按极性自动施加 `mateTransform` |
 
 > 原 `normal_aligned`（绕法向连续旋转）须通过插入 `Joint` 模块实现；
-> 原 `adaptor`（坐标适配）须通过插入 `Adaptor` 模块实现。两者均不再是连接类型。
+> 原 `adaptor`（坐标适配）须通过插入 `Adaptor_45`（或其它型号的 Adaptor）模块实现。两者均不再是连接类型。
 > 装配时的离散朝向选择由连接级 `roll` 表达（见 `§10.3`），非连接类型。
 
 ## 参数作用域

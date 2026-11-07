@@ -45,7 +45,7 @@ disp(r.frames.linkB);
 - **body**：优先加载 `bodies[].geometry` 指向的 STEP 几何，按 body pose 变换后以半透明蓝色面片显示。
 - **几何缺失/失败**：若 `geometry` 缺失、路径无效、导入失败，或 MATLAB 当前不可用 STEP 导入 API，则不画 body 实体，仅保留 body triad、label 与各 frame/port。
 - **port**（`exposed: true`）：实线三元轴 + 实心点 + 粗体标签。
-- **内部 frame**（`exposed: false`，如 Adaptor 的 `rectify`/`align_axis`）：虚线三元轴 + 细标签。
+- **内部 frame**（`exposed: false`，如 Adaptor_45 的 `rectify`/`align_axis`）：虚线三元轴 + 细标签。
 - **pending 旋转**（待 SLX 提取）：洋红色标注 `(pending R)`，旋转按单位阵占位。
 - `world` 坐标系画在原点，根 body 与之重合。
 

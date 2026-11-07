@@ -10,7 +10,7 @@ instances:
   manipulator_L:
     type: Manipulator
   adaptor_L:
-    type: Adaptor
+    type: Adaptor_45
   frame_1:
     type: Frame
   connector_1:
@@ -40,12 +40,12 @@ instances:
   frame_7:
     type: Frame
   adaptor_R:
-    type: Adaptor
+    type: Adaptor_45
   manipulator_R:
     type: Manipulator
 
 connections:
-  # --- 左侧驱动：Manipulator_L → Adaptor_L → Frame_1 ---
+  # --- 左侧驱动：Manipulator_L → adaptor_L → Frame_1 ---
   - ports: [manipulator_L.dock, adaptor_L.attachment_point]
   - ports: [adaptor_L.pin_connector_A, frame_1.faceXMinus]
   # --- Frame_1 → Connector_1(Pin) → Frame_2 ---
@@ -68,6 +68,6 @@ connections:
   # --- Frame_6 → Connector_2(Pin) → Frame_7 ---
   - ports: [frame_6.faceYPlus, connector_2.sideA]
   - ports: [connector_2.sideB, frame_7.faceYMinus]
-  # --- Frame_7 → Adaptor_R → Manipulator_R ---
+  # --- Frame_7 → adaptor_R → Manipulator_R ---
   - ports: [frame_7.faceXMinus, adaptor_R.pin_connector_B]
   - ports: [adaptor_R.attachment_point, manipulator_R.dock]

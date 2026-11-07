@@ -112,7 +112,7 @@ function result = module(moduleYaml, configYaml)
     L = max(4, 0.30 * maxr);          % triad axis length
 
     % --- figure ---
-    fig = figure('Name', sprintf('Module: %s', m.module_type), 'Color', 'w');
+    fig = core.VizHelpers.newFigure(sprintf('Module: %s', m.module_type));
     ax = axes('Parent', fig); hold(ax, 'on'); grid(ax, 'on'); axis(ax, 'equal');
     view(ax, 135, 25); xlabel(ax, 'X (mm)'); ylabel(ax, 'Y (mm)'); zlabel(ax, 'Z (mm)');
 

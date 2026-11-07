@@ -97,7 +97,7 @@
 整个符号化体系自底向上分为四层，每层只由下一层组合而成，不跨层耦合：
 
 - **L0 元件（Element）**：建模原语，即 `Body`、`Frame`、`Port`、`FixedTransform`、`Joint`、`Constraint`。类比 Simscape 基本块或 URDF 基本类型，是体系最底层、不可再分的语素。
-- **L1 模块（Module）**：把若干元件封装成的**参数化模板**，相当于一个类——定义一次、多次实例化。参考来源是 `slx_module_reference` 的库模块（`Frame`、`Pin`、`Joint`、`Adaptor`、`ToolPipette`），类比 Simulink 的 masked subsystem / library，或 OOP 的类加 xacro 宏。注意模块层的「`Frame` 模块」与元件层的「`Frame` 坐标系」同名但不同物。模块对外只暴露 `Port`。
+- **L1 模块（Module）**：把若干元件封装成的**参数化模板**，相当于一个类——定义一次、多次实例化。参考来源是 `slx_module_reference` 的库模块（`Frame`、`Pin`、`Joint`、`Adaptor`（本库为 `Adaptor_45`）、`ToolPipette`），类比 Simulink 的 masked subsystem / library，或 OOP 的类加 xacro 宏。注意模块层的「`Frame` 模块」与元件层的「`Frame` 坐标系」同名但不同物。模块对外只暴露 `Port`。
 - **L2 机构（Mechanism）**：多个模块实例按端口连接组成的机构本体，类比 Simulink 子系统。机构只描述「本体长什么样、怎么拼」，可以是开环（树）或含闭环（一般图）。
 
   **FK 传播范式：工具端生长（Tool-Rooted Growth）**
@@ -125,7 +125,7 @@
 - 统一全局坐标系约定、右手系规则、旋转正方向、长度单位和角度单位。
 - 统一模块端口的命名规则，例如 `faceXPlus`、`sideA`、`linkB` 这种“语义名 + 朝向/角色”的组合。
 - 统一端口的数学含义：端口本质上是一个 `exposed=true` 的局部参考坐标系，而不只是一个连接点；`+Z` 统一为朝外对插法向，并用**极性**（`socket`/`plug`）区分公母、用**旋转对称阶**约束离散装配朝向。
-- 统一“连接”的定义：所有端口 `+Z` 朝外，连接即“面对面对插”，解释器按极性自动施加标准 mate 变换（仅 `socket↔plug` 合法）；装配时绕法向的朝向选择由连接级**离散 `roll`** 表达（仅离散，连续转动改用 `Joint` 模块），坐标适配仍通过插入 `Adaptor` 模块实现。
+- 统一“连接”的定义：所有端口 `+Z` 朝外，连接即“面对面对插”，解释器按极性自动施加标准 mate 变换（仅 `socket↔plug` 合法）；装配时绕法向的朝向选择由连接级**离散 `roll`** 表达（仅离散，连续转动改用 `Joint` 模块），坐标适配仍通过插入 `Adaptor_45` 模块实现。
 - 统一参数作用域：哪些参数属于模块类定义，哪些参数属于实例，哪些参数属于整个机构配置。
 - 统一执行层语义：外部驱动力旋量与世界系如何闭合回路、`actuated` 关节如何形成开环、闭环判据如何定义。
 
@@ -146,7 +146,7 @@
 
 目标：把现有 Simulink 模块库抽象成文本优先的模块定义表，先建立最小闭环机构所需的核心模块集。
 
-起步建议直接以当前已拆解的库模块为最小集合：`Frame`、`Pin`、`Joint`、`Adaptor`、`ToolPipette`。`slx` 只作为参考源，最终权威定义必须落在文本格式中。
+起步建议直接以当前已拆解的库模块为最小集合：`Frame`、`Pin`、`Joint`、`Adaptor_45`、`ToolPipette`。`slx` 只作为参考源，最终权威定义必须落在文本格式中。
 
 具体任务：
 
@@ -154,7 +154,7 @@
 - 为每个模块列出：几何参数、外部端口、内部刚体、内部关节、内部固定变换、功能参考点。
 - 为每个端口定义局部坐标系，包括原点位置、主轴方向、法向约定和端口角色。
 - 为每个关节定义自由度类型和变量名约定，例如 `revolute(q)`、`prismatic(d)`。
-- 区分“结构模块”和“运动模块”：例如 `Frame` 偏结构实体，`Joint` 偏运动原语，`Adaptor` 偏坐标适配。
+- 区分“结构模块”和“运动模块”：例如 `Frame` 偏结构实体，`Joint` 偏运动原语，`Adaptor_45` 偏坐标适配。
 - 允许参数表达式保留符号形式，例如 `cubeLength/2`、`-tipDistance`，不要在模块定义阶段强制数值化。
 
 建议的数据层次至少包含三层：
@@ -171,7 +171,7 @@
 | `specs/modules/Frame.yaml` | `Frame` 立方体结构件（structural, 0 DOF, 1 body + 6 socket 端口） |
 | `specs/modules/Pin.yaml` | `Pin` 销钉连接件（structural, 0 DOF, 1 body + 2 plug 端口） |
 | `specs/modules/Joint.yaml` | `Joint` 铰接关节件（kinematic, 1 DOF revolute, 2 bodies + 2 plug 端口） |
-| `specs/modules/Adaptor.yaml` | `Adaptor` 坐标适配件（structural, 0 DOF, 1 body + 2 plug 端口） |
+| `specs/modules/Adaptor_45.yaml` | `Adaptor_45` 45° 坐标适配件（structural, 0 DOF, 1 body + 2 plug 端口） |
 | `specs/modules/ToolPipette.yaml` | `ToolPipette` 工具末端件（structural, 0 DOF, 1 body + 1 plug + 1 任务系） |
 | `specs/modules/Manipulator.yaml` | `Manipulator` 外部驱动接口件（kinematic, 3 DOF cartesian = 3 prismatic, 4 bodies + 1 socket + 1 ground frame, 非 SLX 来源） |
 

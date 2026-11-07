@@ -3,7 +3,7 @@
 #
 # 本案例由 mrex_modularization 生成（stage C），是 v01–v04 装配变体的基准：
 # 两条 platform 侧 Joint 均为 roll 1，两侧 Manipulator dock 均无 roll，
-# Adaptor 1 接 frame_3.faceZMinus（roll 1）。与 v01 的装配差异：
+# Adaptor_45 1 接 frame_3.faceZMinus（roll 1）。与 v01 的装配差异：
 #   - joint_2.linkB ↔ platform_frame.faceXMinus：roll 1（v01: 无 roll）
 #   - manipulator_2.dock ↔ adaptor_2.attachment_point：无 roll（v01: roll 2）
 #   - adaptor_1.pin_connector_B ↔ frame_3.faceZMinus + roll 1（v01: faceYMinus，无 roll）

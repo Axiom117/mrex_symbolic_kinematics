@@ -4,7 +4,7 @@ function result = mechanism(dslYaml, configYaml)
 %   specs/dsl/examples/*.yaml, delegates DSL→IR expansion to ir.Expander
 %   (pure symbolic pipeline), substitutes joint values from config, then
 %   draws:
-%     - each body as imported STEP geometry when available (colored by type)
+%     - each body as imported STL geometry when available (colored by type)
 %     - each frame/port as an RGB coordinate triad (X=red, Y=green, Z=blue)
 %     - each mate as a diagnostic segment between the paired port origins
 %       (zero-length when aligned; a visible gap reveals mis-mated ports)
@@ -63,7 +63,7 @@ function result = mechanism(dslYaml, configYaml)
     L = max(4, 0.20 * maxr);
 
     % --- figure ---
-    fig = figure('Name', sprintf('Mechanism: %s', mechName), 'Color', 'w');
+    fig = core.VizHelpers.newFigure(sprintf('Mechanism: %s', mechName));
     ax = axes('Parent', fig); hold(ax, 'on'); grid(ax, 'on'); axis(ax, 'equal');
     view(ax, 135, 25); xlabel(ax, 'X (mm)'); ylabel(ax, 'Y (mm)'); zlabel(ax, 'Z (mm)');
     title(ax, sprintf('%s  —  %d instances, %d connections  (X=red Y=green Z=blue)', ...

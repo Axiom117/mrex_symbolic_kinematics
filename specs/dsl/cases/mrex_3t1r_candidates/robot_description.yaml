@@ -17,9 +17,9 @@ instances:
   tool_1:
     type: ToolPipette
   adaptor_1:
-    type: Adaptor
+    type: Adaptor_45
   adaptor_2:
-    type: Adaptor
+    type: Adaptor_45
   frame_1:
     type: Frame
   frame_2:

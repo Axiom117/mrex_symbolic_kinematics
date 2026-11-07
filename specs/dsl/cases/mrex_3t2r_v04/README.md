@@ -7,7 +7,7 @@
 
 ## 结构概述
 
-两端各一个 **Manipulator**（3-DOF 笛卡尔驱动，`dx/dy/dz`）经 **Adaptor** 接入
+两端各一个 **Manipulator**（3-DOF 笛卡尔驱动，`dx/dy/dz`）经 **Adaptor_45** 接入
 M-REx 单元链；主运动链由 4 个 revolute **Joint**（`joint_1` … `joint_4`）串接
 `Frame 1/2/3/4` 组成，`platform_frame` 汇聚左右两支并分支到 **ToolPipette**
 （`tool_1`），提供 `tip_origin` 观测点。零位下 `tool_1.tip_origin` 与世界原点重合
@@ -34,12 +34,12 @@ flowchart TD
 
     subgraph left["左支"]
         direction TB
-        j2{{Joint 2}} --> f1[Frame 1] --> j1{{Joint 1}} --> f3[Frame 3] --> a1[Adaptor 1] --> m1[Manipulator 1]
+        j2{{Joint 2}} --> f1[Frame 1] --> j1{{Joint 1}} --> f3[Frame 3] --> a1[Adaptor_45 1] --> m1[Manipulator 1]
     end
 
     subgraph right["右支"]
         direction TB
-        j4{{Joint 4}} --> f2[Frame 2] --> j3{{Joint 3}} --> f4[Frame 4] --> a2[Adaptor 2] --> m2[Manipulator 2]
+        j4{{Joint 4}} --> f2[Frame 2] --> j3{{Joint 3}} --> f4[Frame 4] --> a2[Adaptor_45 2] --> m2[Manipulator 2]
     end
 
     pf --> j2
@@ -57,7 +57,7 @@ flowchart TD
 
 > **阅读方式**：从顶部工具向下看。`platform_frame` 将左右两支横向展开；Joint 层
 > 跨支对齐（Joint 2/4、Joint 1/3），最底层两个 Manipulator 收束到同一个
-> `World / Ground` 节点展示闭环。本变体不含 Pin 模块，Adaptor 直接对接 Frame。
+> `World / Ground` 节点展示闭环。本变体不含 Pin 模块，Adaptor_45 直接对接 Frame。
 
 ## 符号变量表
 

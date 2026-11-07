@@ -13,7 +13,7 @@ hierarchy:
 
 naming:
   element_types: lowerCamelCase
-  module_types: UpperCamelCase
+  module_types: UpperCamelCase     # 同族变体允许 _<后缀>（如 Adaptor_45、Adaptor_90）
   instance_names: [lowerCamelCase, snake_case]
   parameter_names: lowerCamelCase
   fixed_keywords: [body, frame, port, fixedTransform, joint, constraint]

@@ -89,7 +89,7 @@ function play(poseSeq, scene, varargin)
     showTrail = opts.ShowTrail && useWorldAnchor;
 
     % ---- figure setup ----
-    fig = figure('Name', sprintf('Animation: %s', poseSeq.MechName), 'Color', 'w', ...
+    fig = core.VizHelpers.newFigure(sprintf('Animation: %s', poseSeq.MechName), ...
         'NumberTitle', 'off');
     ax = axes('Parent', fig); hold(ax, 'on'); grid(ax, 'on'); axis(ax, 'equal');
     view(ax, opts.View(1), opts.View(2)); camproj(ax, 'orthographic');

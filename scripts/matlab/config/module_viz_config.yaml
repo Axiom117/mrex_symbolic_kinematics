@@ -15,7 +15,7 @@ Pin: {}
 Joint:
   # q: 0.5236        # 30° = pi/6，展示转动副自由度（默认 0 为零位）
   q: 0
-Adaptor: {}
+Adaptor_45: {}
 
 ToolPipette:
   tipDistance: 30

@@ -1,10 +1,22 @@
 classdef VizHelpers
     %VIZHELPERS  Geometry import & MATLAB figure-drawing helpers.
-    %   All methods are static.  Covers STL/STEP import dispatch,
-    %   patch rendering with feature-edge overlay, and coordinate-triad
-    %   drawing (RGB axes with arrowheads).
+    %   All methods are static.  Covers light-themed figure creation, STL/STEP
+    %   import dispatch, patch rendering with feature-edge overlay, and
+    %   coordinate-triad drawing (RGB axes with arrowheads).
 
     methods (Static)
+
+        %% create a figure locked to the light theme (white canvas)
+        %   R2025a+ figures follow the desktop theme by default, which turns
+        %   axes and labels dark in dark mode. Forcing Theme='light' keeps the
+        %   hard-coded triad/label colours readable on the white background.
+        %   Additional name-value pairs are forwarded to FIGURE.
+        function fig = newFigure(name, varargin)
+            fig = figure('Name', name, 'Color', 'w', varargin{:});
+            if isprop(fig, 'Theme')
+                fig.Theme = 'light';
+            end
+        end
 
         %% import geometry into surface patch data, preferring the referenced file
         function geom = importGeometry(geomPath)
@@ -83,7 +95,7 @@ classdef VizHelpers
                 case 'Joint';        c = [0.85 0.45 0.25];
                 case 'ToolPipette'; c = [0.35 0.70 0.40];
                 case 'Manipulator';  c = [0.60 0.40 0.75];
-                case 'Adaptor';      c = [0.75 0.65 0.25];
+                case 'Adaptor_45';   c = [0.75 0.65 0.25];
                 case 'Pin';          c = [0.50 0.50 0.50];
                 otherwise;           c = [0.45 0.45 0.45];
             end

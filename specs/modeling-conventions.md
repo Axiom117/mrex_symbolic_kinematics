@@ -36,13 +36,13 @@
 ### 2.2 L1 模块（Module）
 
 模块是把若干元件封装成的**参数化模板**，相当于一个类（class）：定义一次、多次实例化。
-其参考来源是 `slx_module_reference` 中的库模块（`Frame`、`Pin`、`Joint`、`Adaptor`、`ToolPipette`）。
+其参考来源是 `slx_module_reference` 中的库模块（`Frame`、`Pin`、`Joint`、`Adaptor`（本库为 `Adaptor_45`）、`ToolPipette`）。
 
 - **命名歧义警告**：模块 `Frame`（立方体结构模块）与元件 `Frame`（坐标系原语）同名但不同物。
   例如 `Joint` 模块内部封装了一个 `Joint` 元件加若干 `Port` 元件。行文中以「`Frame` 模块」「`Joint` 模块」明示模块层。
 - **模块 = 类，实例 = 对象**：每次在机构中使用模块都等于由模板创建一个实例，实例携带自己的名字与实例参数（见 §11）。
 - **模块对外只暴露 `Port`**：内部 `Body`/`Frame`/`FixedTransform`/`Joint` 为实现细节，跨模块只能通过 `Port` 连接。
-- **结构模块 vs 运动模块**：`Frame`/`Pin`/`Adaptor` 偏结构与坐标适配（无自由度），`Joint` 偏运动原语（含自由度）。
+- **结构模块 vs 运动模块**：`Frame`/`Pin`/`Adaptor_45` 偏结构与坐标适配（无自由度），`Joint` 偏运动原语（含自由度）。
 
 ### 2.3 L2 机构（Mechanism）
 
@@ -73,7 +73,7 @@
 
 关键区分：外部驱动器的框架偏移是**配置时静态标定**的几何量，而非要求驱动器在运行时输出额外补偿位移来拼合闭环。运行期间，驱动器仅输出相对于该标定零位的增量运动。
 
-该外部驱动器由 `Manipulator` 关节模块物化（见 §5.6）：其 XYZ 三轴平移由内部三个 `prismatic` 关节（变量 `dx`/`dy`/`dz`）串联组合而成，等价于一个 3-DOF 笛卡尔关节。机构侧以 `socket` 端口 `dock` 对接 `Adaptor.attachment_point`（`plug`），世界侧以 `ground` frame（无 `polarity`）由执行层绑定到 `world`；上文的静态零位偏移即写入 `Manipulator` 的接地配置。`Manipulator` 是 L1 模块，但物化了 L3 外部驱动：其关节在闭环构型下作为待求未知量，在开环构型下作为 `actuated` 输入（见下）。
+该外部驱动器由 `Manipulator` 关节模块物化（见 §5.6）：其 XYZ 三轴平移由内部三个 `prismatic` 关节（变量 `dx`/`dy`/`dz`）串联组合而成，等价于一个 3-DOF 笛卡尔关节。机构侧以 `socket` 端口 `dock` 对接 `Adaptor_45.attachment_point`（`plug`），世界侧以 `ground` frame（无 `polarity`）由执行层绑定到 `world`；上文的静态零位偏移即写入 `Manipulator` 的接地配置。`Manipulator` 是 L1 模块，但物化了 L3 外部驱动：其关节在闭环构型下作为待求未知量，在开环构型下作为 `actuated` 输入（见下）。
 
 > **L2 内部闭环 vs L3 世界系闭环**：上述 M-REx 主构型属于 **L3 世界系闭环**——回路因多个 `ground` frame
 > 各带静态标定偏移绑定到同一 `world` 参考系而形成，DSL 中机构本体为开环链（不写 `closed: true`），切口由 L3 `closure_cuts`
@@ -142,7 +142,7 @@ flowchart LR
 
 | `exposed` | `observable` | 含义 | 典型例子 |
 |-----------|-------------|------|---------|
-| `true` | `false` | 机械端口，可被 mate | `Frame.faceZPlus`、`Adaptor.mount_point` |
+| `true` | `false` | 机械端口，可被 mate | `Frame.faceZPlus`、`Adaptor_45.attachment_point` |
 | `true` | `true` | 端口 + 观测 world 位姿 | `Manipulator.dock`、`Manipulator.ground` |
 | `false` | `true` | 内部观测点，不可连接 | `ToolPipette.tip_origin` |
 | `false` | `false` | 纯内部 frame | `Joint` 模块的 `hingeA`/`hingeB` |
@@ -167,14 +167,14 @@ DSL 源码与解释器 IR 中，元件类型名与模块类型名遵循不同的
 | 层次 | 对象 | 规则 | 示例 |
 |------|------|------|------|
 | L0 元件 | 建模原语类型名 | 小写驼峰（lowerCamelCase） | `body`、`frame`、`fixedTransform`、`joint`、`constraint` |
-| L1 模块 | 模块类型名 | 首字母大写（UpperCamelCase） | `Frame`、`Pin`、`Joint`、`Adaptor`、`ToolPipette` |
+| L1 模块 | 模块类型名 | 首字母大写（UpperCamelCase，同族变体可用 `_<后缀>`） | `Frame`、`Pin`、`Joint`、`Adaptor_45`、`ToolPipette` |
 | L2 实例 | 模块实例名 | 小写驼峰或下划线分隔 | `frame_1`、`myJoint`（不得与元件关键字重名） |
 | 参数 | 几何／配置参数名 | 小写驼峰 | `cubeLength`、`tipDistance` |
 
 规则说明：
 
 - **元件名**（`body`、`frame`、`fixedTransform`、`joint`、`constraint`）是 DSL 的固定关键字，不可自定义扩展，不可写成 UpperCamelCase。
-- **模块名**首字母大写，使用纯 UpperCamelCase（无下划线，如 `ToolPipette`）。
+- **模块名**首字母大写，使用 UpperCamelCase；同族变体用 `_<后缀>` 区分型号（如 `Adaptor_45`、`Adaptor_90`），其余模块保持纯 UpperCamelCase（如 `ToolPipette`）。
 - 此规则使 `frame`（元件：局部坐标系原语）与 `Frame`（模块：立方体结构件）、`joint`（元件：运动副原语）与 `Joint`（模块：铰接关节件）在 DSL 中仅凭大小写即可区分，无需上下文推断。
 - 本文档行文为可读性沿用首字母大写指代元件类型名；**凡出现于 DSL 代码或解释器 IR 时，必须使用小写驼峰形式**。
 
@@ -191,7 +191,7 @@ DSL 源码与解释器 IR 中，元件类型名与模块类型名遵循不同的
 | `Frame` | 结构 | 0 | 6 面 `faceX±`/`faceY±`/`faceZ±` | socket | `Frame.yaml` |
 | `Pin` | 结构 | 0 | `sideA`、`sideB` | plug | `Pin.yaml` |
 | `Joint` | 运动 | 1 (revolute) | `linkA`、`linkB` | plug | `Joint.yaml` |
-| `Adaptor` | 结构 | 0 | `attachment_point`、`pin_connector` | plug | `Adaptor.yaml` |
+| `Adaptor_45` | 结构 | 0 | `attachment_point`、`pin_connector` | plug | `Adaptor_45.yaml` |
 | `ToolPipette` | 结构 | 0 | `connector_side`(plug)、`tip_origin`(无极性) | — | `ToolPipette.yaml` |
 | `Manipulator` | 运动 | 3 (cartesian = 3×prismatic) | `dock`(socket)、`ground`(无极性) | — | `Manipulator.yaml` |
 
@@ -300,11 +300,11 @@ DSL 源码与解释器 IR 中，元件类型名与模块类型名遵循不同的
 | 极性 | 现实对应 | 归属 |
 |------|------|------|
 | `socket` | 凹面 + 不锈钢贴片（凹陷接收面） | `Frame` 的六个面端口 + `Manipulator.dock`（外部驱动对接口） |
-| `plug` | 凸面 + 磁铁（凸出对插面） | 所有贴到 `socket` 面上的机械面（`Pin`、`Joint`、`Adaptor`、工具连接面等） |
+| `plug` | 凸面 + 磁铁（凸出对插面） | 所有贴到 `socket` 面上的机械面（`Pin`、`Joint`、`Adaptor_45`、工具连接面等） |
 
 规则：
 
-- **`socket` 提供者为 `Frame` 与 `Manipulator`**：`Frame` 六面是体素枢纽（hub）的 `socket`；`Manipulator.dock` 额外提供一个 `socket`，用于对接外部驱动侧的 `Adaptor.mount_point`（`plug`）。其余一切机械对接面均为 `plug`。
+- **`socket` 提供者为 `Frame` 与 `Manipulator`**：`Frame` 六面是体素枢纽（hub）的 `socket`；`Manipulator.dock` 额外提供一个 `socket`，用于对接外部驱动侧的 `Adaptor_45.attachment_point`（`plug`）。其余一切机械对接面均为 `plug`。
 - 由此自然得到合法性：`socket↔plug` 合法；`socket↔socket`、`plug↔plug`（pin–joint、pin–pin、joint–joint）一律非法。
 - `polarity` **可选**：只有机械对接面才声明。任务/工具参考系（如 `tip_origin`）不带 `polarity`，不能作为连接端（§9.1）。**例外**：`Manipulator.ground` 也不带 `polarity`，但它是世界侧**接地系**，由 L3 执行层绑定到 `world`（非机械 mate，不受 `socket↔plug` 门控）。
 - 极性只是**逻辑门控**，不改变运动学；它只决定连接是否被允许，连接生成的几何仍由 §10 的 mate 变换给出。
@@ -348,7 +348,7 @@ $$T_{\text{plug} \leftarrow \text{socket}} = R_z\!\left(\text{roll} \cdot \tfrac
 
 ### 10.4 其他情形的正确处理
 
-- **坐标适配**（原 `adaptor`）：在两端口间插入 `Adaptor` 模块，由其内部 `FixedTransform` 承载所需平移/旋转，两侧各连接一次。
+- **坐标适配**（原 `adaptor`）：在两端口间插入 `Adaptor_45`（或其它型号的 Adaptor）模块，由其内部 `FixedTransform` 承载所需平移/旋转，两侧各连接一次。
 - **绕法向连续旋转**（原 `normal_aligned`）：插入 revolute `Joint` 模块，关节轴取公共法向 `+Z`；自由度由该 `Joint` 元件显式描述（区别于 §10.3 的离散 `roll`）。
 
 ### 10.5 连接合法性判据
