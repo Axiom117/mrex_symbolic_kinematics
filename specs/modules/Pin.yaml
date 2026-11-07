@@ -10,7 +10,6 @@
 module_type: Pin
 category: structural
 dof: 0
-geometry: assets/connector_dowel_pin.step
 description: 双端销钉连接件，仅做坐标重定向、无平移、无自由度。
 source: mrex_hypercube_modules.slx#system_15
 extraction_status: partial

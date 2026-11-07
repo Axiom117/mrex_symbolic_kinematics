@@ -58,8 +58,8 @@ connections:
 | `Frame` | 六面 `faceX±`、`faceY±`、`faceZ±` |
 | `Manipulator` | `dock` |
 
-其余一切机械对接面（`Pin.sideA/B`、`Joint.linkA/B`、`Adaptor_45.attachment_point/pin_connector`、
-`ToolPipette.connector_side`）均为 `plug`。故合法连接必有一端来自上表。
+其余一切机械对接面（`Pin.sideA/B`、`Joint.linkA/B`、`Adaptor_45` / `Adaptor_90` 的
+`attachment_point` 与 `pin_connector_A/B`、`ToolPipette.connector_side`）均为 `plug`。故合法连接必有一端来自上表。
 
 ---
 
@@ -140,17 +140,17 @@ connections:
 
 连接不携带任意变换或自由度。以下需求**必须插入模块**，不得赋予连接新语义：
 
-### 5.1 坐标适配 → 插入 `Adaptor_45`
+### 5.1 坐标适配 → 插入 `Adaptor`（`Adaptor_45` / `Adaptor_90`）
 
-若两端口面对插后朝向/位置不满足需求，需要额外的固定平移或旋转，则在两端口间插入 `Adaptor_45` 模块，
+若两端口面对插后朝向/位置不满足需求，需要额外的固定平移或旋转，则在两端口间插入 `Adaptor_45` 或 `Adaptor_90` 模块，
 由其内部 `fixedTransform` 承载所需重定向，两侧各连接一次：
 
 ```yaml
-# 错误：试图让连接自带一个 45° 旋转 —— DSL 无此语法，也不允许
-# 正确：插入 Adaptor_45
+# 错误：试图让连接自带一个 45°/90° 旋转 —— DSL 无此语法，也不允许
+# 正确：插入 Adaptor_45（或 Adaptor_90）
 connections:
   - ports: [manip.dock, adaptor.attachment_point]
-  - ports: [adaptor.pin_connector, frameBase.faceZPlus]
+  - ports: [adaptor.pin_connector_A, frameBase.faceZPlus]
 ```
 
 ### 5.2 连续绕法向旋转 → 插入 revolute `Joint`

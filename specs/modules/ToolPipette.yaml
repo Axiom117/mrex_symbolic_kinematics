@@ -10,7 +10,6 @@
 module_type: ToolPipette
 category: structural
 dof: 0
-geometry: assets/tool.STEP
 description: 单主体工具末端件，暴露结构连接面与工具尖端参考原点。
 source: mrex_hypercube_modules.slx#system_32
 extraction_status: partial

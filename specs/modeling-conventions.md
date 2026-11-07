@@ -36,13 +36,13 @@
 ### 2.2 L1 模块（Module）
 
 模块是把若干元件封装成的**参数化模板**，相当于一个类（class）：定义一次、多次实例化。
-其参考来源是 `slx_module_reference` 中的库模块（`Frame`、`Pin`、`Joint`、`Adaptor`（本库为 `Adaptor_45`）、`ToolPipette`）。
+其参考来源是 `slx_module_reference` 中的库模块（`Frame`、`Pin`、`Joint`、`Adaptor`（本库为 `Adaptor_45` / `Adaptor_90`）、`ToolPipette`）。
 
 - **命名歧义警告**：模块 `Frame`（立方体结构模块）与元件 `Frame`（坐标系原语）同名但不同物。
   例如 `Joint` 模块内部封装了一个 `Joint` 元件加若干 `Port` 元件。行文中以「`Frame` 模块」「`Joint` 模块」明示模块层。
 - **模块 = 类，实例 = 对象**：每次在机构中使用模块都等于由模板创建一个实例，实例携带自己的名字与实例参数（见 §11）。
 - **模块对外只暴露 `Port`**：内部 `Body`/`Frame`/`FixedTransform`/`Joint` 为实现细节，跨模块只能通过 `Port` 连接。
-- **结构模块 vs 运动模块**：`Frame`/`Pin`/`Adaptor_45` 偏结构与坐标适配（无自由度），`Joint` 偏运动原语（含自由度）。
+- **结构模块 vs 运动模块**：`Frame`/`Pin`/`Adaptor_45`/`Adaptor_90` 偏结构与坐标适配（无自由度），`Joint` 偏运动原语（含自由度）。
 
 ### 2.3 L2 机构（Mechanism）
 
@@ -184,7 +184,7 @@ DSL 源码与解释器 IR 中，元件类型名与模块类型名遵循不同的
 
 ## 5. 核心模块库一览
 
-以下 6 个 L1 模块是当前模块库的最小核心集。完整字段定义、端口变换精确数值与内部运动学图见各模块 YAML（`specs/modules/`），由 `module-definition.schema.yaml` 校验。
+以下 7 个 L1 模块是当前模块库的最小核心集。完整字段定义、端口变换精确数值与内部运动学图见各模块 YAML（`specs/modules/`），由 `module-definition.schema.yaml` 校验。
 
 | 模块 | 类别 | DOF | 端口 | 极性 | YAML |
 |------|------|------|------|------|------|
@@ -192,6 +192,7 @@ DSL 源码与解释器 IR 中，元件类型名与模块类型名遵循不同的
 | `Pin` | 结构 | 0 | `sideA`、`sideB` | plug | `Pin.yaml` |
 | `Joint` | 运动 | 1 (revolute) | `linkA`、`linkB` | plug | `Joint.yaml` |
 | `Adaptor_45` | 结构 | 0 | `attachment_point`、`pin_connector` | plug | `Adaptor_45.yaml` |
+| `Adaptor_90` | 结构 | 0 | `attachment_point`、`pin_connector_A/B` | plug | `Adaptor_90.yaml` |
 | `ToolPipette` | 结构 | 0 | `connector_side`(plug)、`tip_origin`(无极性) | — | `ToolPipette.yaml` |
 | `Manipulator` | 运动 | 3 (cartesian = 3×prismatic) | `dock`(socket)、`ground`(无极性) | — | `Manipulator.yaml` |
 

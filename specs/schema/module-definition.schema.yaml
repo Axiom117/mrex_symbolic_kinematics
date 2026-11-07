@@ -6,7 +6,7 @@
 # ../modeling-conventions.md 与 ./conventions.yaml；凡冲突以约定文档为准。
 #
 # 三层数据结构（A.1 要求，见 modeling-conventions.md §2.2、A.1 任务）：
-#   1. 模块定义表  —— 顶层字段：module_type / category / dof / geometry / parameters
+#   1. 模块定义表  —— 顶层字段：module_type / category / dof / parameters
 #   2. 端口框架表  —— frames（其中 exposed:true 即 port）
 #   3. 内部运动学图 —— bodies + fixed_transforms + joints
 #
@@ -144,8 +144,13 @@ $defs:
     properties:
       name: { $ref: "#/$defs/identifier" }
       geometry:
-        description: STEP/网格资源名，仅供可视，不参与运动学。
+        description: >-
+          网格/STEP 资源名，仅供可视，不参与运动学。
+          模块几何统一由 body 声明，顶层不再设 geometry 字段。
         type: string
+      observable:
+        description: 真表示此 body 的中心 frame 纳入可观测变量注册表（§3.6）。
+        type: boolean
 
   frame:
     description: 局部右手坐标系；exposed:true 即为 port（§3.2）。
@@ -163,9 +168,10 @@ $defs:
       semantic_tag:
         description: >-
           不参与机械 mate 与运动学变换生成（§9.3）；但 `ground` 标签触发 L3 world
-          绑定（Manipulator.ground → world），`tool` 标签标记 FK/IK 输出候选系。
+          绑定（Manipulator.ground → world），`tool` 标签标记 FK/IK 输出候选系，
+          `root` 标签标记 FK 传播起点（展开时以单位位姿播种）。
         type: string
-        enum: [connector, joint_side, tool, dock, ground]
+        enum: [connector, joint_side, tool, dock, ground, root]
       polarity:
         description: >-
           机械对接极性（§9.5）：socket = 凹面钢片（Frame 六面 + Manipulator.dock），

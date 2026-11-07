@@ -149,6 +149,8 @@
 
 这说明 `Adaptor_45` 在 DSL 中更像一个坐标适配模块，而不是纯连接块。
 
+`Adaptor_90` 是本项目基于 `Adaptor_45` 派生的 90° 同族变体（端口集合与命名沿用原型，平移/旋转按 90° 适配重新给出），SLX 库中无对应子系统，故不在上表列出。
+
 ## 对符号化语言最有价值的抽象
 
 从当前 `slx` 可以提炼出一套稳定的模块描述字段：
@@ -157,7 +159,9 @@
 module:
   name: Frame
   category: rigid_body | connector | joint | tool | adaptor
-  geometry: assets/frame_hyper_cube.STEP
+  bodies:
+    - name: body
+      geometry: assets/frame_hyper_cube.STEP
   parameters:
     - cubeLength
   ports:

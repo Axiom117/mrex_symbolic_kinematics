@@ -5,7 +5,7 @@
 # 键 = module_type（与模块定义文件中的 module_type 字段一致）
 # 值 = 该模块所有参数的取值映射。参数名须与模块定义中 parameters[].name 匹配。
 #
-# 无参数的模块（如 Joint、Pin、Adaptor_45、Manipulator）不出现在本文件中。
+# 无参数的模块（如 Joint、Pin、Adaptor_45、Adaptor_90、Manipulator）不出现在本文件中。
 
 Frame:
   cubeLength: 10

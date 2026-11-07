@@ -172,6 +172,7 @@
 | `specs/modules/Pin.yaml` | `Pin` 销钉连接件（structural, 0 DOF, 1 body + 2 plug 端口） |
 | `specs/modules/Joint.yaml` | `Joint` 铰接关节件（kinematic, 1 DOF revolute, 2 bodies + 2 plug 端口） |
 | `specs/modules/Adaptor_45.yaml` | `Adaptor_45` 45° 坐标适配件（structural, 0 DOF, 1 body + 2 plug 端口） |
+| `specs/modules/Adaptor_90.yaml` | `Adaptor_90` 90° 坐标适配件（structural, 0 DOF, 1 body + 3 plug 端口，Adaptor_45 同族变体） |
 | `specs/modules/ToolPipette.yaml` | `ToolPipette` 工具末端件（structural, 0 DOF, 1 body + 1 plug + 1 任务系） |
 | `specs/modules/Manipulator.yaml` | `Manipulator` 外部驱动接口件（kinematic, 3 DOF cartesian = 3 prismatic, 4 bodies + 1 socket + 1 ground frame, 非 SLX 来源） |
 

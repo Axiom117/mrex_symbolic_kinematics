@@ -95,7 +95,7 @@ classdef VizHelpers
                 case 'Joint';        c = [0.85 0.45 0.25];
                 case 'ToolPipette'; c = [0.35 0.70 0.40];
                 case 'Manipulator';  c = [0.60 0.40 0.75];
-                case 'Adaptor_45';   c = [0.75 0.65 0.25];
+                case {'Adaptor_45', 'Adaptor_90'}; c = [0.75 0.65 0.25];
                 case 'Pin';          c = [0.50 0.50 0.50];
                 otherwise;           c = [0.45 0.45 0.45];
             end

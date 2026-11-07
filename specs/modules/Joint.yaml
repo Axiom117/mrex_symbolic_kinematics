@@ -20,7 +20,6 @@
 module_type: Joint
 category: kinematic
 dof: 1
-geometry: assets/linkage_hinge_joint.STEP
 description: 单自由度铰接关节，两侧刚体经固定变换接入中间转动副。
 source: mrex_hypercube_modules.slx#system_21
 extraction_status: partial

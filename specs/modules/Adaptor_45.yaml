@@ -14,7 +14,6 @@
 module_type: Adaptor_45
 category: structural
 dof: 0
-geometry: assets/adaptor_45.STEP
 description: 45° 坐标适配件，把一侧端口坐标系经两级重定向适配到另一侧对接面。
 source: mrex_hypercube_modules.slx#system_39
 extraction_status: partial

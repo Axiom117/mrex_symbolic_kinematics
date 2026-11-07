@@ -1,0 +1,5 @@
+# Zero-pose joint variable config for the engine (``evaluateNumeric``).
+# Layout: instance name -> variable (revolute: q; prismatic: dx/dy/dz).
+# Unlisted variables default to zero.  Uncomment to stage a pose, e.g.:
+# joint_1:
+#   q: 0.5236

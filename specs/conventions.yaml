@@ -21,7 +21,7 @@ naming:
 # 建模原语：模块/机构/IR 只能由这些元件组合而成
 element_types:
   nodes:
-    body: { dof: 0, geometry_host: true, center_frame: true, fields: [name, geometry?] }
+    body: { dof: 0, geometry_host: true, center_frame: true, fields: [name, geometry?, observable?] }
     frame: { dof: 0, host: body, fields: [name, host, exposed?, semantic_tag?, polarity?, symmetry?, observable?] }   # Port = exposed:true; 位姿由 fixedTransform 给出；observable 标记是否纳入解释器输出
   edges:
     fixedTransform: { dof: 0, fields: [from_frame, to_frame, translation, rotation] }
@@ -56,7 +56,7 @@ port:
   semantic_tag_affects_kinematics: false
   name_pattern: '^(face[XYZ][+-]|[a-zA-Z][a-zA-Z0-9_]*)$'
   unique_per_module: true
-  semantic_tags: [connector, joint_side, tool, dock, ground]   # ground = world 侧接地 frame（Manipulator，无 polarity，由 L3 绑定 world）
+  semantic_tags: [connector, joint_side, tool, dock, ground, root]   # ground = world 侧接地 frame（Manipulator，无 polarity，由 L3 绑定 world）；root = FK 传播起点（展开时以单位位姿播种）
   mating_normal: +Z_outward    # 所有 port 的 +Z 统一为朝模块外的对插法向（§9.1）
   polarity_values: [socket, plug]   # socket = 凹面钢片（Frame 六面 + Manipulator 驱动口）；plug = 贴到 socket 上的凸面磁铁
   polarity_optional: true      # 任务/工具参考系（如 tip_origin）不带 polarity，不参与机械连接

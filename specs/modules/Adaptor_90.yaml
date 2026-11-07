@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=../schema/module-definition.schema.yaml
+# 模块：Adaptor_90（90° 坐标适配件）
+# 参考来源：mrex_hypercube_modules.slx → system_39.xml（原型 Adaptor_45）
+# 数据权威来源：modeling-conventions.md §5.4、module_library_reference.md
+#
+# 同族变体：由 Adaptor_45 派生的 90° 型号，SLX 库中无独立子系统；
+# 端口集合与命名沿用原型，平移/旋转按 90° 适配重新给出，数值均已冻结。
+#
+# 拓扑（三个端口均直接由 body 派生，无内部中间 frame）：
+#   body —fixedTransform→ pin_connector_A
+#   body —fixedTransform→ pin_connector_B
+#   body —fixedTransform→ attachment_point
+
+module_type: Adaptor_90
+category: structural
+dof: 0
+description: 90° 坐标适配件：attachment_point 接外部驱动器，pin_connector_A/B 接 M-REx Unit。
+source: derived from Adaptor_45（mrex_hypercube_modules.slx#system_39）
+extraction_status: complete
+
+bodies:
+  - name: body
+    geometry: assets/adaptor_90.stl
+
+# --- 端口框架表（attachment_point 为和外部驱动器连接的点位；pin_connector_A/B 为与 M-REx Unit 连接点位）---
+frames:
+  - { name: attachment_point, host: body, exposed: true, semantic_tag: connector, polarity: plug }
+  - { name: pin_connector_A, host: body, exposed: true, semantic_tag: dock, polarity: plug }
+  - { name: pin_connector_B, host: body, exposed: true, semantic_tag: dock, polarity: plug }
+
+# --- 内部运动学图 · 固定变换 ---
+# pin_connector_A/B 姿态：align 等价于 Ry(+90°) 后再绕端口自身 +Z 转 180°
+# （等价 rpy: [3.1416, -1.5708, 0]；单轴角等价于 omega [0.7071, 0, 0.7071], q 3.1416）。
+fixed_transforms:
+  - from_frame: body
+    to_frame: pin_connector_A
+    translation: [2, 5, 6]
+    rotation: { align: { a: ["+X", "+Z"], b: ["+Y", "-Y"] } }
+  - from_frame: body
+    to_frame: pin_connector_B
+    translation: [2, -5, 6]
+    rotation: { align: { a: ["+X", "+Z"], b: ["+Y", "-Y"] } }
+  - from_frame: body
+    to_frame: attachment_point
+    translation: [0, 0, 0]
+    rotation: { align: { a: ["+Z", "+X"], b: ["+X", "+Z"] } }
+

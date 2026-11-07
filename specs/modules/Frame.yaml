@@ -4,7 +4,7 @@
 # 数据权威来源：modeling-conventions.md §5.1、module_library_reference.md
 #
 # 三层结构：
-#   模块定义表  —— 下方 module_type/category/dof/geometry/parameters
+#   模块定义表  —— 下方 module_type/category/dof/parameters
 #   端口框架表  —— frames（六个面端口）
 #   内部运动学图 —— bodies + fixed_transforms（中心 frame → 六面端口）
 
