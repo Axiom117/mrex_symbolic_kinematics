@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=../schema/module-definition.schema.yaml
+# 模块：ToolPipette（工具末端件）
+# 参考来源：mrex_hypercube_modules.slx → system_32.xml
+# 数据权威来源：modeling-conventions.md §5.5、module_library_reference.md
+#
+# 工具模块：connector_side 为结构连接面，tip_origin 为工具尖端参考原点
+# （EndFrame 候选）。两端口平移已知；参考摘要未给出朝向（无 align 规则），
+# 故旋转以 pending 占位，extraction_status 为 partial。
+
+module_type: ToolPipette
+category: structural
+dof: 0
+description: 单主体工具末端件，暴露结构连接面与工具尖端参考原点。
+source: mrex_hypercube_modules.slx#system_32
+extraction_status: partial
+
+# --- 模块定义表 · 参数 ---
+parameters:
+  - name: tipDistance
+    unit: mm
+    description: 工具尖端沿 -Z 距 body 中心的距离。
+
+bodies:
+  - name: body
+    geometry: assets/tool_head_30.stl
+
+# --- 端口框架表（connector_side 为机械对接面 plug；tip_origin 为任务系，无极性）---
+frames:
+  - { name: connector_side, host: body, exposed: true, semantic_tag: connector, polarity: plug }
+  - { name: tip_origin, host: body, exposed: false, semantic_tag: root, observable: true }
+
+# --- 内部运动学图 ---
+fixed_transforms:
+  - from_frame: body
+    to_frame: connector_side
+    translation: [-10, 0, 0]
+    rotation: { align: { a: ["+X", "+X"], b: ["+Y", "+Y"] } }
+  - from_frame: body
+    to_frame: tip_origin
+    translation: [-26, 0, -65.5]
+    rotation: { align: { a: ["+X", "-Z"], b: ["+Y", "+Y"] } }

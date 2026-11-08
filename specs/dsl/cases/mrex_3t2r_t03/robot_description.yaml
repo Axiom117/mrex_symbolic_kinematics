@@ -19,7 +19,7 @@ instances:
   platform_frame:
     type: Frame
   tool_1:
-    type: ToolPipette
+    type: ToolHead_30
   adaptor_1:
     type: Adaptor_90
   frame_1:

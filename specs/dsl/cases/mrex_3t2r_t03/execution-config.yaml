@@ -25,8 +25,8 @@ endFrame: tool_1.tip_origin
 # (-0.7071, 0, +0.7071) mm（模长 1 mm）。
 tool_frame:
   transform:
-    translation: [0, 0, -1]     # mm，工具系原点相对 endFrame
-    rotation: { rpy: [0, 45deg, 0] }
+    translation: [0, 0, 0]     # mm，工具系原点相对 endFrame
+    rotation: { rpy: [0, 0, 0] }
 
 world_binding:
   - ground: manipulator_1.ground
