@@ -193,9 +193,8 @@ function test_animation_m_rex_3t2r_v00()
         devG = max(devG, norm(seq.Frames{k}(g1) - seq.Frames{1}(g1), 'fro'));
     end
     % frame 1 of the tour is the exact zero pose (q1 = q2 = 0, p = 0), so the
-    % tool world shows the −45° pipette tilt directly
-    devZero = norm(seq.Frames{1}(seq.RootFrame) ...
-        - localTO(core.RigidBodyMath.roty(-pi/4), [0; 0; 0]), 'fro');
+    % tip in the tool world is exactly U⁻¹ (1 mm offset at −45° about y)
+    devZero = norm(seq.Frames{1}(seq.RootFrame) - Uinv, 'fro');
     assert(devTip < 1e-9, 'tool-world tip path deviates from U⁻¹·D_k (%.3e)', devTip);
     assert(devTrail < 1e-9, 'tool-world trail deviates (%.3e)', devTrail);
     assert(devZero < 1e-9, ...
